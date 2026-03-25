@@ -1,0 +1,4 @@
+numpy==2.4.3
+opencv-python==4.13.0.92
+pillow==12.1.1
+python-ev3dev2==2.1.0.post1
