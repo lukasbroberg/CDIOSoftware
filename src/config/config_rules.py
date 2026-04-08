@@ -1,3 +1,5 @@
+import numpy as np
+
 #Color config is for defining the color rules of each object in the picture
 COLOR_CONFIG = {
     "orange_ball": {

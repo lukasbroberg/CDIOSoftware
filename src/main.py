@@ -1,9 +1,9 @@
 import numpy as np
 import cv2 as cv
 from config.config_rules import COLOR_CONFIG, MIN_AREA
-from src.ImageProcessing.mask import detect_objects
-from src.ImageProcessing.image import loadImage
-from src.draw.draw import draw_results
+from ImageProcessing.mask import detect_objects
+from ImageProcessing.image import loadImage
+from draw.draw import draw_results
 
 #Doesnt work right now
 def on_click(event, x, y, hsv, flags, param):
@@ -12,7 +12,7 @@ def on_click(event, x, y, hsv, flags, param):
         print(f"HSV for ({x,y}): {hsv[y,x]}")
 
 def main():
-    image_path = "images/capture.png"
+    image_path = "images/capture3.png"
     picture = loadImage(image_path)
     
     #Raw picture

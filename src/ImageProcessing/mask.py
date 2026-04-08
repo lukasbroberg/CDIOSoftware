@@ -3,7 +3,7 @@ import numpy as np
 import cv2 as cv
 
 #Cleanup noise using morphological image processing
-MORPH_KERNEL = cv.getStructuringElement(cv.MORPH_ELLIPSE, (10,10))
+MORPH_KERNEL = cv.getStructuringElement(cv.MORPH_RECT, (7,7))
 
 #Creates a mask around the object
 def build_mask(hsv: np.ndarray, cfg: dict) -> np.ndarray:
