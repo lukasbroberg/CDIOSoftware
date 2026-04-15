@@ -4,6 +4,7 @@ from config.config_rules import COLOR_CONFIG, MIN_AREA
 from ImageProcessing.mask import detect_objects
 from ImageProcessing.image import loadImage
 from draw.draw import draw_results
+from controller.mainController import *
 
 #Doesnt work right now
 def on_click(event, x, y, hsv, flags, param):
@@ -23,13 +24,16 @@ def main():
     
     #Detection pictures
     detections = detect_objects(picture)
-    for det in detections:
-        print(
-            f"[{det['label']}]"
-            f"centroid=({[det['centroid'][0]]},{[det['centroid'][1]]})"
-            f"bbox={det['bbox']}"
-            f"area={det['area']:.0f}px"
-        )
+    #for det in detections:
+    #    print(
+    #        f"[{det['label']}]"
+    #        f"centroid=({[det['centroid'][0]]},{[det['centroid'][1]]})"
+    #        f"bbox={det['bbox']}"
+    #        f"area={det['area']:.0f}px"
+    #    )
+    
+    mainController = MainController()
+    mainController.initializeObjects(detections)
     
     output = draw_results(picture, detections)
     
