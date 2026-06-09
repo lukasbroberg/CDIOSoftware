@@ -5,7 +5,7 @@ ret, frame = cap.read()
 cap.release()
  
 if ret:
-    cv.imwrite("capture5.png", frame)
+    cv.imwrite("test_image_aruco2.png", frame)
     print("Saved capture.png")
 else:
     print("Failed to capture image")

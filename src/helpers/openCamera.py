@@ -9,6 +9,9 @@ frame_height = int(cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
 fourcc = cv2.VideoWriter.fourcc(*'mp4v')
 out = cv2.VideoWriter('output.mp4',fourcc,10.0,(frame_width,frame_height))
 
+
+
+
 #Start camera
 while True:
     ret, frame = cam.read()    
