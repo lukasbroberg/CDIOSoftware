@@ -1,13 +1,6 @@
 class Robot:
-    def __init__(
-        self,
-        x1,
-        y1,
-        x2,
-        y2,
-        rotation,
-        state
-    ):
+    #Constructor for Robot
+    def __init__(self,x1,y1,x2,y2,rotation,state):
         self.collision = {
             x1,
             y1,
@@ -16,3 +9,5 @@ class Robot:
         }
         self.rotation = rotation
         self.state = state
+    
+    

@@ -15,7 +15,7 @@ COLOR_CONFIG = {
         "kernel": cv.getStructuringElement(cv.MORPH_ELLIPSE, (5,5)),
         "lower": np.array([0,   0, 200]),
         "upper": np.array([180, 40, 255]),
-        "draw_color": (200, 200, 200),  # BGR – light gray for display
+        "draw_color": (240, 240, 200),  # BGR – light gray for display
     },
     "boundary": {
         # Red wraps around 0 in OpenCV HSV; handle both lobes
