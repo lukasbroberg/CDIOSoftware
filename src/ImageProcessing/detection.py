@@ -189,7 +189,7 @@ def detect_robot_from_aruco(image: np.ndarray):
     corners, marker_ids, rejected = detector.detectMarkers(gray)
     
     if(marker_ids is None):
-        return
+        return None, None, None
     
     flatten_ids = marker_ids.flatten()
     
@@ -198,6 +198,9 @@ def detect_robot_from_aruco(image: np.ndarray):
         
         #Get position
         robot_pcts = corners[index_robot][0] 
+        
+        #if(robot_pcts is None or len(robot_pcts)==0):
+        #    return None, None, None
         
         x1 = int(robot_pcts[:, 0].min())
         x2 = int(robot_pcts[:, 0].max())
@@ -213,4 +216,6 @@ def detect_robot_from_aruco(image: np.ndarray):
         
         robot_pos = (x1,x2,y1,y2)
         robot_angle = angle_deg
+        
         return robot_pos, robot_angle, robot_pcts
+    return None, None, None

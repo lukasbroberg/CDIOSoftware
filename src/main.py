@@ -33,8 +33,8 @@ def generate_aruco_marker():
 def main():
     
     image_rec_active = True
-    #image_rec_from_live_video(image_rec_active)
-    image_rec_from_static_image()
+    image_rec_from_live_video(image_rec_active)
+    #image_rec_from_static_image()
     
     #generate_aruco_marker()
     
@@ -112,7 +112,12 @@ def image_rec_from_live_video(image_rec_active: bool):
             goals = detect_goals_from_aruco(frame)
             robot_pos, robot_angle, raw_pts = detect_robot_from_aruco(image_cropped_by_boundaries)
             cross_boundary = detect_boundary_cross(image_cropped_by_boundaries)
-            robot_pos_formatted = np.array(raw_pts,dtype=np.int32)
+            
+            #Format robot_pos for drawing
+            robot_pos_formatted = None
+            if(raw_pts is not None):
+                robot_pos_formatted = np.array(raw_pts,dtype=np.int32)
+            
             output = draw_results(frame, detections, final_boundaries, goals, robot_pos_formatted, robot_angle, cross_boundary)
                 
             # Display the captured frame
