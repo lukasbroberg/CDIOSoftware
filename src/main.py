@@ -93,8 +93,8 @@ def image_rec_from_live_video(image_rec_active: bool):
     frame_height = int(cam.get(cv.CAP_PROP_FRAME_HEIGHT))
 
     #Define codec
-    fourcc = cv.VideoWriter.fourcc(*'mp4v')
-    out = cv.VideoWriter('output.mp4',fourcc,2.0,(frame_width,frame_height))
+    #fourcc = cv.VideoWriter.fourcc(*'mp4v')
+    #out = cv.VideoWriter('output.mp4',fourcc,2.0,(frame_width,frame_height))
     
     #Start camera
     while True:
@@ -102,7 +102,7 @@ def image_rec_from_live_video(image_rec_active: bool):
         ret, frame = cam.read()    
 
         # Write the frame to the output file
-        out.write(frame)
+        #out.write(frame)
         
         #Detecetions
         if image_rec_active:
@@ -137,7 +137,7 @@ def image_rec_from_live_video(image_rec_active: bool):
             print(image_rec_active)
 
     cam.release()
-    out.release()
+    #out.release()
     cv.destroyAllWindows()
 
 if __name__ == "__main__":
