@@ -37,7 +37,6 @@ def draw_results(image: np.ndarray, detectections: list[dict], lines: list = Non
                 cv.putText(output,str(label),(x1,y1),1,2,(0,120,0),2,None,None)
             
     if robot is not None:
-        #x1,x2,y1,y2 = robot
         cv.polylines(output, [robot], isClosed=True,color=(0,255,100), thickness=5)
         cv.putText(output,"robot",[robot][0][0]+(10,0),1,2,(0,255,100),2,None,None)
         if robot_angle is not None:
