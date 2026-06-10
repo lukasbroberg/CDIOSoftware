@@ -5,7 +5,7 @@ from ImageProcessing.image import loadImage, mask_image_by_walls
 from ImageProcessing.detection import detect_objects, detect_boundary_lines, detect_goals_from_lines, detect_goals_from_aruco, detect_robot_from_aruco, detect_boundary_cross
 from draw.draw import draw_results
 from controller.mainController import *
-from ImageProcessing.aruco.arucoConfig import aruco_config
+from config.arucoConfig import aruco_config 
 
 #Doesnt work right now
 def on_mouse_click(event, x, y, flags, params):

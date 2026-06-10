@@ -1,5 +1,6 @@
 import cv2 as cv
 import numpy as np
+from config.arucoConfig import aruco_config
 
 #Loads the image and returns image
 def loadImage(imagePath):

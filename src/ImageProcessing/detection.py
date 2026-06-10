@@ -3,7 +3,7 @@ import numpy as np
 import cv2 as cv
 import struct
 import math
-from ImageProcessing.aruco.arucoConfig import aruco_config
+from config.arucoConfig import aruco_config
 from ImageProcessing.image import mask_image_by_walls
 from ImageProcessing.mask import build_mask, clean_mask
 
