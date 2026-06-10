@@ -1,15 +1,7 @@
-from dotenv import load_dotenv
-import socket
 import sys
-import os
 import termios
 import tty
-
-load_dotenv()
-ROBOT_IP = os.getenv("ROBOT_IP")
-PORT = os.getenv("ROBOT_PORT")
-
-#cmd = sys.argv[1]
+from connect import establish_connection
 
 def read_key():
     fd = sys.stdin.fileno()
@@ -31,9 +23,18 @@ KEY_MAP = {
     "q": "EXIT",
 }
 
-def establish_connection():
-    #with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.connect((ROBOT_IP, int(PORT)))
-    print("connected")
-    return s
+keep_connection = True
+s = establish_connection()
+while(keep_connection):        
+    key = read_key()
+            
+    if key not in KEY_MAP: continue
+    
+    cmd = KEY_MAP[key]
+    
+    if cmd == "EXIT":
+        keep_connection=False
+        break
+    
+    s.sendall((cmd+"\n").encode("utf-8"))
+    print("command: " + str(cmd) + " sent")
