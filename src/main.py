@@ -1,8 +1,8 @@
 import numpy as np
 import cv2 as cv
 from config.config_rules import COLOR_CONFIG, MIN_AREA
-from ImageProcessing.mask import detect_objects, detect_boundary_lines, detect_goals_from_lines, detect_goals_from_aruco, detect_robot_from_aruco
-from ImageProcessing.image import loadImage
+from ImageProcessing.image import loadImage, mask_image_by_walls
+from ImageProcessing.detection import detect_objects, detect_boundary_lines, detect_goals_from_lines, detect_goals_from_aruco, detect_robot_from_aruco, detect_boundary_cross
 from draw.draw import draw_results
 from controller.mainController import *
 from ImageProcessing.aruco.arucoConfig import aruco_config
@@ -32,7 +32,7 @@ def generate_aruco_marker():
 
 def main():
     
-    image_rec_active = False
+    image_rec_active = True
     #image_rec_from_live_video(image_rec_active)
     image_rec_from_static_image()
     
@@ -69,13 +69,16 @@ def image_rec_from_static_image():
     image_hsv = cv.cvtColor(picture, cv.COLOR_BGR2HSV)    
     
     #Detection pictures
-    detections = detect_objects(picture)
     lines, final_boundaries = detect_boundary_lines(picture)
+    image_cropped_by_boundaries = mask_image_by_walls(picture,final_boundaries)
+    
+    detections = detect_objects(image_cropped_by_boundaries)
+
     goals = detect_goals_from_aruco(picture)
-    robot = detect_robot_from_aruco(picture)
-    
-    
-    output = draw_results(picture, detections, final_boundaries, goals, robot)
+    robot_pos, robot_angle, raw_pts = detect_robot_from_aruco(image_cropped_by_boundaries)
+    cross_boundary = detect_boundary_cross(image_cropped_by_boundaries)
+    robot_pos_formatted = np.array(raw_pts,dtype=np.int32)
+    output = draw_results(picture, detections, final_boundaries, goals, robot_pos_formatted, robot_angle, cross_boundary)
     
     cv.imshow("Detections", output)
     cv.setMouseCallback("Detections", on_mouse_click, param={"image": picture, "hsv": image_hsv})
@@ -105,12 +108,13 @@ def image_rec_from_live_video(image_rec_active: bool):
         if image_rec_active:
             detections = detect_objects(frame)
             lines, final_boundaries = detect_boundary_lines(frame)
+            image_cropped_by_boundaries = mask_image_by_walls(frame,final_boundaries)
             goals = detect_goals_from_aruco(frame)
-            robot = detect_robot_from_aruco(frame)
-        
-            #Draw detections
-            output = draw_results(frame, detections, final_boundaries, goals, robot)
-            
+            robot_pos, robot_angle, raw_pts = detect_robot_from_aruco(image_cropped_by_boundaries)
+            cross_boundary = detect_boundary_cross(image_cropped_by_boundaries)
+            robot_pos_formatted = np.array(raw_pts,dtype=np.int32)
+            output = draw_results(frame, detections, final_boundaries, goals, robot_pos_formatted, robot_angle, cross_boundary)
+                
             # Display the captured frame
             cv.imshow('Camera', output)
         else:
