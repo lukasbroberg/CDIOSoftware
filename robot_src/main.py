@@ -1,8 +1,12 @@
+import sys
+if sys.platform != 'linux' or 'ev3dev' not in open('/etc/os-release').read():
+    import mock_ev3dev2  # patches sys.modules before ev3dev2 loads
 import socket
 from time import sleep
-
 from ev3dev2.motor import LargeMotor, MediumMotor, OUTPUT_A, OUTPUT_B, OUTPUT_C, OUTPUT_D, SpeedPercent
 from ev3dev2.sound import *
+# your_script.py
+
 
 HOST = "0.0.0.0"
 PORT = 9999
@@ -29,24 +33,25 @@ def stop_all():
     stop_drive()
 
 
-def drive_forward():
-    left_motor.on(SpeedPercent(DRIVE_SPEED))
-    right_motor.on(SpeedPercent(DRIVE_SPEED))
+def drive_forward(spd):
+    print(spd)
+    left_motor.on(SpeedPercent(spd))
+    right_motor.on(SpeedPercent(spd))
 
 
-def drive_backward():
-    left_motor.on(SpeedPercent(-DRIVE_SPEED))
-    right_motor.on(SpeedPercent(-DRIVE_SPEED))
+def drive_backward(spd):
+    left_motor.on(SpeedPercent(-spd))
+    right_motor.on(SpeedPercent(-spd))
 
 
-def turn_left():
-    left_motor.on(SpeedPercent(-TURN_SPEED))
-    right_motor.on(SpeedPercent(TURN_SPEED))
+def turn_left(spd):
+    left_motor.on(SpeedPercent(-spd))
+    right_motor.on(SpeedPercent(spd))
 
 
-def turn_right():
-    left_motor.on(SpeedPercent(TURN_SPEED))
-    right_motor.on(SpeedPercent(-TURN_SPEED))
+def turn_right(spd):
+    left_motor.on(SpeedPercent(spd))
+    right_motor.on(SpeedPercent(-spd))
 
 
 def timed_drive(action, duration=1.0):
@@ -96,39 +101,45 @@ def release_cycle():
     motor_a.on(SpeedPercent(80))
     
 COMMAND_MAP = {
-    "A_ON": motor_a.on(SpeedPercent(-35)),
-    "A_REV": motor_a.on(SpeedPercent(35)),
-    "A_OFF": motor_a.stop(stop_action="brake"),
-    "B_IN": motor_b.on_for_degrees(SpeedPercent(20), -90, brake=True, block=True),
-    "B_OUT": motor_b.on_for_degrees(SpeedPercent(20), 90, brake=True, block=True),
+    "A_ON": lambda: motor_a.on(SpeedPercent(-35)),
+    "A_REV": lambda: motor_a.on(SpeedPercent(35)),
+    "A_OFF": lambda: motor_a.stop(stop_action="brake"),
+    "B_IN": lambda: motor_b.on_for_degrees(SpeedPercent(20), -90, brake=True, block=True),
+    "B_OUT": lambda: motor_b.on_for_degrees(SpeedPercent(20), 90, brake=True, block=True),
     "COLLECT": collect_cycle,
     "RELEASE": release_cycle,
-    "FORWARD_1s": timed_drive(drive_forward, 1.0),
-    "FORWARD": drive_forward,
-    "BACKWARD": drive_backward,
-    "LEFT": timed_drive(turn_left, 1.0),
-    "RIGHT": timed_drive(turn_right, 1.0),
+    "FORWARD_TIMED": lambda time=None: timed_drive(lambda: drive_forward(50),time or 1.0),
+    "BACKWARD_TIMED": lambda time=None: timed_drive(lambda: drive_backward(50),time or 25),
+    "FORWARD": lambda v=None: drive_forward(v or 10),
+    "BACKWARD": lambda v=None: drive_backward(v or 10),
+    "LEFT_TIMED": lambda time=None: timed_drive(lambda: turn_left(TURN_SPEED), time or 1.0),
+    "RIGHT_TIMED": lambda time=None: timed_drive(lambda: turn_right(TURN_SPEED), time or 1.0),
     "NUDGE_FORWARD": nudge_forward,
     "NUDGE_BACKWARD": nudge_backward,
     "NUDGE_LEFT": nudge_left,
     "NUDGE_RIGHT": nudge_right,
     "STOP_DRIVE": stop_drive,
-    "STOP": stop_all,
+    "STOP":lambda: stop_all,
     #"ON_CONNECTION": IAMFART,
 }
 
 
 def handle_command(command: str):
-    command = command.strip().upper()
+    parts = command.strip().upper().split("::")
+    value = int(parts[1]) if len(parts) > 1 and parts[1] else None
+    command = parts[0]
     if not command:
         return
 
-    print("Ny kommando:", command)
+    print("Ny kommando:", command," Vaerdi:", value)
 
     if command not in COMMAND_MAP:
+        print("Ukendt kommando", command)
         return
-
-    COMMAND_MAP[command]()
+    if value is not None:
+        COMMAND_MAP[command](value)
+    else:
+        COMMAND_MAP[command]()
 
 
 def main():

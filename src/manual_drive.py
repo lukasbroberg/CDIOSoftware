@@ -13,10 +13,10 @@ def read_key():
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
 KEY_MAP = {
-    "w": "FORWARD",
-    "a": "NUDGE_LEFT",
-    "s": "BACKWARD",
-    "d": "NUDGE_RIGHT",
+    "w": "FORWARD_TIMED::2",
+    "a": "LEFT_TIMED::2",
+    "s": "BACKWARD_TIMED::2",
+    "d": "RIGHT_TIMED::2",
     "c": "COLLECT",
     "r": "RELEASE",
     " ": "STOP",
