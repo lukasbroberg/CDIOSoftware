@@ -1,17 +1,30 @@
+
+from config.config_rules import COLOR_CONFIG, MIN_AREA, MAX_AREA
 import numpy as np
 import cv2 as cv
+import struct
+import math
+from config.arucoConfig import aruco_config
+from ImageProcessing.image import mask_image_by_walls
 
-#Draws upon the a copy of the original image the actual detected objects
-def draw_results(image: np.ndarray, detectections: list[dict]) -> np.ndarray:
-    output = image.copy()
+
+#Cleanup noise using morphological image processing
+MORPH_KERNEL = cv.getStructuringElement(cv.MORPH_ELLIPSE, (3,3))
+
+#Creates a mask around the object
+def build_mask(hsv: np.ndarray, cfg: dict) -> np.ndarray:
+    mask = cv.inRange(hsv, cfg["lower"], cfg["upper"])
+    if "lower2" in cfg:
+        mask2 = cv.inRange(hsv, cfg["lower2"], cfg["upper2"])
+        mask = cv.bitwise_or(mask, mask2)
+    return mask
+
+#cleans up the mask
+def clean_mask(mask: np.ndarray, cfg: dict) -> np.ndarray:
     
-    for det in detectections:
-        x,y,w,h = det["bbox"]
-        cx,cy = det["centroid"]
-        color = det["color"]
-        label = det["label"]
-        
-        cv.rectangle(output, (x,y), (x+w,y+h), color, 2)
-        cv.circle(output,(cx, cy), 5, color, -1)
-        
-    return output
+    kernel = cfg.get("kernel", MORPH_KERNEL)
+    mask = cv.morphologyEx(mask, cv.MORPH_CLOSE, kernel, iterations=1)
+    mask = cv.erode(mask, kernel, iterations=1)
+    mask = cv.dilate(mask, kernel, iterations=3)
+    
+    return mask
