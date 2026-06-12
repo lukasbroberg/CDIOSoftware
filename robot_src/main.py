@@ -2,6 +2,7 @@ import socket
 from time import sleep
 
 from ev3dev2.motor import LargeMotor, MediumMotor, OUTPUT_A, OUTPUT_B, OUTPUT_C, OUTPUT_D, SpeedPercent
+from ev3dev2.sound import *
 
 HOST = "0.0.0.0"
 PORT = 9999
@@ -81,12 +82,15 @@ def nudge_right():
 def collect_cycle():
     motor_a.on(SpeedPercent(-45))
     sleep(1.0)
-    motor_b.on_for_degrees(SpeedPercent(20), -90, brake=True, block=True)
+    motor_b.on_for_degrees(SpeedPercent(5), -90, brake=True, block=True)
     sleep(1.5)
-    motor_b.on_for_degrees(SpeedPercent(20), 90, brake=True, block=True)
+    motor_b.on_for_degrees(SpeedPercent(5), 90, brake=True, block=True)
     sleep(1.5)
     motor_a.stop(stop_action="brake")
 
+def IAMFART():
+    connected_string = "I AM FART"
+    Sound.speak(self=self,text=connected_string)
 
 def release_cycle():
     motor_a.on(SpeedPercent(80))
@@ -110,6 +114,7 @@ COMMAND_MAP = {
     "NUDGE_RIGHT": nudge_right,
     "STOP_DRIVE": stop_drive,
     "STOP": stop_all,
+    #"ON_CONNECTION": IAMFART,
 }
 
 
@@ -132,6 +137,8 @@ def main():
         server.bind((HOST, PORT))
         server.listen(1)
 
+        #COMMAND_MAP["ON_CONNECTION"]
+        
         print("Robot-server lytter paa {}:{}".format(HOST, PORT))
 
         while True:

@@ -21,10 +21,17 @@ KEY_MAP = {
     "r": "RELEASE",
     " ": "STOP",
     "q": "EXIT",
+    "p": "ON_CONNECTION",
+}
+
+VALUE_MAP = {
+    "DRIVE_SPEED": 25,
+    "TURN_SPEED": 20,
 }
 
 keep_connection = True
 s = establish_connection()
+#s.sendall(("ON_CONNECTION"+"\n").encode("utf-8"))
 while(keep_connection):        
     key = read_key()
             
