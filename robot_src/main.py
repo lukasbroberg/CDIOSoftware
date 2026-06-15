@@ -58,6 +58,7 @@ def timed_drive(action, duration=1.0):
     action()
     sleep(duration)
     stop_drive()
+    
 
 
 def nudge_forward():
@@ -119,7 +120,7 @@ COMMAND_MAP = {
     "NUDGE_LEFT": nudge_left,
     "NUDGE_RIGHT": nudge_right,
     "STOP_DRIVE": stop_drive,
-    "STOP":lambda: stop_all,
+    "STOP": stop_all,
     #"ON_CONNECTION": IAMFART,
 }
 

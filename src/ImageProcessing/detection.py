@@ -9,11 +9,11 @@ from ImageProcessing.mask import build_mask, clean_mask
 
 
 #Detects objects based on color: Orange ball, white ball, etc.  
-def detect_objects(image: np.ndarray) -> list[dict]:
+def detect_objects(image: np.ndarray, config) -> list[dict]:
     hsv = cv.cvtColor(image, cv.COLOR_BGR2HSV)
     results = []    
     
-    for label, cfg in COLOR_CONFIG.items():
+    for label, cfg in config.items():
         mask = build_mask(hsv, cfg)
         mask = clean_mask(mask, cfg)
         contours, _ = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
