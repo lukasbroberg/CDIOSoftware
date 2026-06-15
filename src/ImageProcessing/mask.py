@@ -1,3 +1,4 @@
+
 from config.config_rules import COLOR_CONFIG, MIN_AREA, MAX_AREA
 import numpy as np
 import cv2 as cv
@@ -5,6 +6,7 @@ import struct
 import math
 from config.arucoConfig import aruco_config
 from ImageProcessing.image import mask_image_by_walls
+
 
 #Cleanup noise using morphological image processing
 MORPH_KERNEL = cv.getStructuringElement(cv.MORPH_ELLIPSE, (3,3))
