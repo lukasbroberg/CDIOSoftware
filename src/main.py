@@ -32,33 +32,11 @@ def generate_aruco_marker():
     cv.waitKey(0)
 
 def main():
+    print("MAIN STARTED")
     
     image_rec_active = True
     image_rec_from_live_video(image_rec_active)
-    #image_rec_from_static_image()
     
-    #generate_aruco_marker()
-    
-    
-    #image_path = "images/capture3.png"
-    #picture = loadImage(image_path)
-    
-    #Raw picture
-    #cv.imshow("Displayed image",picture)
-    #image_hsv = cv.cvtColor(picture, cv.COLOR_BGR2HSV)    
-    
-    #Detection pictures
-    #detections = detect_objects(picture)
-    #lines, final_boundaries = detect_boundary_lines(picture)
-    #goals = detect_goals_from_lines(final_boundaries)
-    
-    #output = draw_results(picture, detections, final_boundaries, goals)
-    
-    #cv.imshow("Detections", output)
-    #cv.setMouseCallback("Detections", on_mouse_click, param={"image": picture, "hsv": image_hsv})
-    
-    #cv.waitKey(0)
-    #cv.destroyAllWindows()
 
 #Static function get objects from a static image - use for testing.
 def image_rec_from_static_image():
@@ -86,18 +64,25 @@ def image_rec_from_static_image():
     
     cv.waitKey(0)
     cv.destroyAllWindows()
+    
 
 #Live loop of camera
 def image_rec_from_live_video(image_rec_active: bool):
-    cam = cv.VideoCapture(1)
+    print("CAMERA FUNCTION STARTED")
+
+    cam = cv.VideoCapture(0)
+
+    if not cam.isOpened():
+        print("Camera could not be opened")
+        return
+    
     frame_width = int(cam.get(cv.CAP_PROP_FRAME_WIDTH))
     frame_height = int(cam.get(cv.CAP_PROP_FRAME_HEIGHT))
 
-    #Define codec
-    #fourcc = cv.VideoWriter.fourcc(*'mp4v')
-    #out = cv.VideoWriter('output.mp4',fourcc,2.0,(frame_width,frame_height))
-    
-    #Start camera
+    #INITIALIZE VALUES - Koden kører en enkelt gang og ikke mere
+    controller = MainController() 
+
+    #EACH FRAME - Koden kører for hvert billede i sekundet fra kameraet
     while True:
         #Get camera frame
         ret, frame = cam.read()    
@@ -140,5 +125,5 @@ def image_rec_from_live_video(image_rec_active: bool):
     cam.release()
     #out.release()
     cv.destroyAllWindows()
-
-    
+if __name__ == "__main__":  
+    main()
