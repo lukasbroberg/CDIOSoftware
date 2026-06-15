@@ -26,9 +26,11 @@ class MainController():
     def updateCross(self, cross):
         if cross is not None:
             self.cross=cross
+    
     def updateSmallGoal(self, smallGoal):
         if smallGoal is not None:
             self.smallGoal = smallGoal
+    
     def updateLargeGoal(self, largeGoal):
         if largeGoal is not None:
             self.largeGoal = largeGoal
