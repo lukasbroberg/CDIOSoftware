@@ -1,24 +1,38 @@
 from collections import *
+from models.Robot import *
 
 class MainController():
-    commands = deque() #Commands for the robot as a queue
-    balls = []
-    robot = {}
-    boundary = []
-    smallGoal = {}
-    BigGoal = {}
+    def __init__(self):
+        self.commands = deque() #Commands for the robot as a queue
+        self.balls = None
+        self.robot: Robot = None
+        self.boundaries = None
+        self.cross = None
+        self.smallGoal = None
+        self.largeGoal = None
     
-    ## Instantiates new objects
-    def initializeObjects(ColorDetection):
-        for det in ColorDetection:
-            print(
-            f"[{det['label']}]"
-            f"centroid=({[det['centroid'][0]]},{[det['centroid'][1]]})"
-            f"bbox={det['bbox']}"
-            f"area={det['area']:.0f}px"
-        )
-        pass
+    def updateBalls(self, _balls):
+        if _balls is not None:
+            self.balls = _balls;
+        
+    def updateRobot(self, robot: Robot):
+        if robot is not None:
+            self.robot = robot
     
+    def updateBoundaries(self, boundaries, crossBoundary):
+        if boundaries is not None:
+            self.boundaries = boundaries
+        
+    def updateCross(self, cross):
+        if cross is not None:
+            self.cross=cross
+    def updateSmallGoal(self, smallGoal):
+        if smallGoal is not None:
+            self.smallGoal = smallGoal
+    def updateLargeGoal(self, largeGoal):
+        if largeGoal is not None:
+            self.largeGoal = largeGoal
+        
     def findObjects():
         pass
 

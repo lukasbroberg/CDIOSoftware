@@ -58,6 +58,61 @@ def main():
     
     #cv.waitKey(0)
     #cv.destroyAllWindows()
+    
+
+def setup_trackbars(window_name: str = "Camera") -> None:
+    """Call once after the first cv.imshow(window_name, …)."""
+ 
+    def _noop(_): pass   # OpenCV requires a callback
+ 
+    # ── White ball (HSV) ──────────────────────
+    cv.createTrackbar("W H-min", window_name,   0, 179, _noop)
+    cv.createTrackbar("W H-max", window_name, 179, 179, _noop)
+    cv.createTrackbar("W S-min", window_name,   0, 255, _noop)
+    cv.createTrackbar("W S-max", window_name,  50, 255, _noop)
+    cv.createTrackbar("W V-min", window_name, 200, 255, _noop)
+    cv.createTrackbar("W V-max", window_name, 255, 255, _noop)
+ 
+    # ── Orange ball (HSV) ─────────────────────
+    cv.createTrackbar("O H-min", window_name,   5, 179, _noop)
+    cv.createTrackbar("O H-max", window_name,  20, 179, _noop)
+    cv.createTrackbar("O S-min", window_name, 150, 255, _noop)
+    cv.createTrackbar("O S-max", window_name, 255, 255, _noop)
+    cv.createTrackbar("O V-min", window_name, 150, 255, _noop)
+    cv.createTrackbar("O V-max", window_name, 255, 255, _noop)
+
+def get_params(window_name: str = "Camera") -> dict:
+    """
+    Returns a dict with two sub-dicts:
+ 
+      params["hsv"]["white"]  → (h_min, h_max, s_min, s_max, v_min, v_max)
+      params["hsv"]["orange"] → (h_min, h_max, s_min, s_max, v_min, v_max)
+      params["canny"]         → (lo, hi)
+      params["hough"]         → (rho, threshold, min_line_length, max_line_gap)
+    """
+    g = lambda name: cv.getTrackbarPos(name, window_name)
+ 
+    return {
+        "hsv": {
+            "white": (
+                g("W H-min"), g("W H-max"),
+                g("W S-min"), g("W S-max"),
+                g("W V-min"), g("W V-max"),
+            ),
+            "orange": (
+                g("O H-min"), g("O H-max"),
+                g("O S-min"), g("O S-max"),
+                g("O V-min"), g("O V-max"),
+            ),
+        },
+        "canny": (g("Canny lo"), g("Canny hi")),
+        "hough": (
+            max(1, g("Hough rho")),   # rho must be >= 1
+            g("Hough thresh"),
+            g("Hough minLen"),
+            g("Hough maxGap"),
+        ),
+    }
 
 #Static function get objects from a static image - use for testing.
 def image_rec_from_static_image():
@@ -72,13 +127,17 @@ def image_rec_from_static_image():
     lines, final_boundaries = detect_boundary_lines(picture)
     image_cropped_by_boundaries = mask_image_by_walls(picture,final_boundaries)
     
-    detections = detect_objects(image_cropped_by_boundaries)
+    config = COLOR_CONFIG
+    
+    detections = detect_objects(image_cropped_by_boundaries, config)
 
     goals = detect_goals_from_aruco(picture)
     robot_pos, robot_angle, raw_pts = detect_robot_from_aruco(image_cropped_by_boundaries)
     cross_boundary = detect_boundary_cross(image_cropped_by_boundaries)
     robot_pos_formatted = np.array(raw_pts,dtype=np.int32)
     output = draw_results(picture, detections, final_boundaries, goals, robot_pos_formatted, robot_angle, cross_boundary)
+    
+    
     
     cv.imshow("Detections", output)
     cv.setMouseCallback("Detections", on_mouse_click, param={"image": picture, "hsv": image_hsv})
@@ -92,21 +151,36 @@ def image_rec_from_live_video(image_rec_active: bool):
     frame_width = int(cam.get(cv.CAP_PROP_FRAME_WIDTH))
     frame_height = int(cam.get(cv.CAP_PROP_FRAME_HEIGHT))
 
-    #Define codec
-    #fourcc = cv.VideoWriter.fourcc(*'mp4v')
-    #out = cv.VideoWriter('output.mp4',fourcc,2.0,(frame_width,frame_height))
+
+    trackbars_ready = False
+    show_trackbars = False
+    
+    config = COLOR_CONFIG
+    
     
     #Start camera
     while True:
-        #Get camera frame
-        ret, frame = cam.read()    
+        #Get trackbar values
+        params = get_params() 
+        if show_trackbars:
+            wh = params["hsv"]["white"]
+            og = params["hsv"]["orange"]
+            # White ball
+            config["white_ball"]["lower"] = np.array([wh[0], wh[2], wh[4]])
+            config["white_ball"]["upper"] = np.array([wh[1], wh[3], wh[5]])
 
-        # Write the frame to the output file
-        #out.write(frame)
+            # Orange ball
+            config["orange_ball"]["lower"] = np.array([og[0], og[2], og[4]])
+            config["orange_ball"]["upper"] = np.array([og[1], og[3], og[5]])
+        
+        #Get camera frame
+        ret, frame = cam.read()   
+        
+
         
         #Detecetions
         if image_rec_active:
-            detections = detect_objects(frame)
+            detections = detect_objects(frame, config)
             lines, final_boundaries = detect_boundary_lines(frame)
             image_cropped_by_boundaries = mask_image_by_walls(frame,final_boundaries)
             goals = detect_goals_from_aruco(frame)
@@ -122,6 +196,10 @@ def image_rec_from_live_video(image_rec_active: bool):
                 
             # Display the captured frame
             cv.imshow('Camera', output)
+            
+            if not trackbars_ready and show_trackbars is True:
+                setup_trackbars('Camera')
+                trackbars_ready = True
         else:
             cv.imshow('Camera', frame)
 
