@@ -42,9 +42,15 @@ def detect_objects(image: np.ndarray, config) -> list[dict]:
 
 #Detects the red boundary lines of the level
 def detect_boundary_lines(image: np.ndarray) -> list[dict]:
+    if image is None:
+        return None, None
+    
     hsv = cv.cvtColor(image, cv.COLOR_BGR2HSV)
     red_mask = build_mask(hsv,COLOR_CONFIG["boundary"])
     lines = cv.HoughLinesP(red_mask, rho=1, theta=np.pi/180, threshold=100, minLineLength=100, maxLineGap=20)
+    
+    if lines is None:
+        return None, None
     
     points =    [(line[0][0],line[0][1]) for line in lines] + \
                 [(line[0][2],line[0][3]) for line in lines]
@@ -113,6 +119,12 @@ def detect_goals_from_lines(lines: list[dict]):
 #Detects the cross in the middle of the screen
 def detect_boundary_cross(image: np.ndarray):
     
+    if image is None:
+        return [
+            None,
+            None
+        ]
+    
     h,w = image.shape[:2]
     
     top = h//4
@@ -141,6 +153,9 @@ def detect_boundary_cross(image: np.ndarray):
     
 #Detects and identifies goals based on aruco markers on the level
 def detect_goals_from_aruco(image: np.ndarray):
+    
+    if image is None:
+        return [None, None]
     
     large_goal_id = aruco_config["large_goal_id"]
     small_goal_id = aruco_config["small_goal_id"]
@@ -180,6 +195,9 @@ def detect_goals_from_aruco(image: np.ndarray):
 
 #Detects and identifies the robot based on the aruco marker
 def detect_robot_from_aruco(image: np.ndarray):
+    
+    if image is None:
+        return None, None, None
         
     robot_id = aruco_config["robot_id"]
     

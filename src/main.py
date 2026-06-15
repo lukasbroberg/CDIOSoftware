@@ -1,3 +1,4 @@
+
 import numpy as np
 import cv2 as cv
 from config.config_rules import COLOR_CONFIG, MIN_AREA
@@ -31,10 +32,10 @@ def generate_aruco_marker():
     cv.waitKey(0)
 
 def main():
+    print("MAIN STARTED")
     
     image_rec_active = True
     image_rec_from_live_video(image_rec_active)
-    #image_rec_from_static_image()
     
     #generate_aruco_marker()
     
@@ -144,21 +145,33 @@ def image_rec_from_static_image():
     
     cv.waitKey(0)
     cv.destroyAllWindows()
+    
 
 #Live loop of camera
 def image_rec_from_live_video(image_rec_active: bool):
-    cam = cv.VideoCapture(1)
+    print("CAMERA FUNCTION STARTED")
+
+    cam = cv.VideoCapture(0)
+
+    if not cam.isOpened():
+        print("Camera could not be opened")
+        return
+    
     frame_width = int(cam.get(cv.CAP_PROP_FRAME_WIDTH))
     frame_height = int(cam.get(cv.CAP_PROP_FRAME_HEIGHT))
 
 
+    #INITIALIZE VALUES - Koden kører en enkelt gang og ikke mere
+    controller = MainController() 
+    
     trackbars_ready = False
     show_trackbars = False
     
     config = COLOR_CONFIG
     
     
-    #Start camera
+
+    #EACH FRAME - Koden kører for hvert billede i sekundet fra kameraet
     while True:
         #Get trackbar values
         params = get_params() 
@@ -177,7 +190,10 @@ def image_rec_from_live_video(image_rec_active: bool):
         ret, frame = cam.read()   
         
 
+        if frame is None:
+            continue
         
+            
         #Detecetions
         if image_rec_active:
             detections = detect_objects(frame, config)
@@ -217,7 +233,5 @@ def image_rec_from_live_video(image_rec_active: bool):
     cam.release()
     #out.release()
     cv.destroyAllWindows()
-
-if __name__ == "__main__":
+if __name__ == "__main__":  
     main()
-    

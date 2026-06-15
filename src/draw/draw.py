@@ -4,28 +4,34 @@ import cv2 as cv
 #Draws upon the a copy of the original image the actual detected objects
 def draw_results(image: np.ndarray, detectections: list[dict], lines: list = None, goals: list = None, robot: list = None, robot_angle: float = None, cross_boundary: list = None) -> np.ndarray:
     
+    if image is None:
+        return None
+    
     output = image.copy()
     
     #Draw object detection
-    for det in detectections:
-        x,y,w,h = det["bbox"]
-        cx,cy = det["centroid"]
-        color = det["color"]
-        label = det["label"]
+    if detectections is not None:
+        for det in detectections:
+            x,y,w,h = det["bbox"]
+            cx,cy = det["centroid"]
+            color = det["color"]
+            label = det["label"]
+            
+            cv.rectangle(output, (x,y), (x+w,y+h), color, 2)
+            cv.circle(output,(cx, cy), 5, color, -1)
+            if label is not None:
+                cv.putText(output,str(label),(x+10,y),1,2,color,2,None,None)
         
-        cv.rectangle(output, (x,y), (x+w,y+h), color, 2)
-        cv.circle(output,(cx, cy), 5, color, -1)
-        if label is not None:
-            cv.putText(output,str(label),(x+10,y),1,2,color,2,None,None)
-    
-    horizontal, vertical = [], []
+        horizontal, vertical = [], []
     
     
     #Draw boundary lines
     if lines is not None:
         for i, line in enumerate(lines):
+            if line is None or len(line) != 5:
+                continue
             x1,y1,x2,y2,label = line
-           
+        
             cv.line(output,(x1,y1),(x2,y2),(200,0,0),5)
             cv.putText(output, str(label),(x1,y1),1,2,(0,0,0),2,None,None)
             

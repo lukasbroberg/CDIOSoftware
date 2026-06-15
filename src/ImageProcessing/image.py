@@ -10,6 +10,10 @@ def loadImage(imagePath):
     return image
 
 def mask_image_by_walls(image: np.ndarray, lines: list):
+    
+    if image is None or lines is None:
+        return None
+    
     wall_map = {}
     for x1,y1,x2,y2, label in lines:
         wall_map[label] = (int(x1), int(y1), int(x2), int(y2))
