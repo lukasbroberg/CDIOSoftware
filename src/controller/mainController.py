@@ -1,8 +1,9 @@
 from collections import *
-import math
+from math import *
 from collections import deque
 from collections import *
 from models.Robot import *
+from utils.getDistance import *
 
 GOAL_THRESHOLD = 50
 DISTANCE_THRESHOLD = 80
@@ -10,34 +11,54 @@ ANGLE_THRESHOLD = 10
 
 class MainController():
     def __init__(self):
-        self.commands = deque() #Commands for the robot as a queue
+        self.commandsQueue = ["FORWARD_TIMED::2.0"] #Commands for the robot as a queue
         self.balls = None
         self.robot: Robot = None
         self.boundaries = None
         self.cross = None
         self.smallGoal = None
         self.largeGoal = None
+        self.currentState = None
         
     def initializeObjects(self, scene):
-        self.robot = scene["robot"]
+        robot_data = scene["robot"]
+        if robot_data is not None:
+            
+            if self.robot is None:
+                self.robot = Robot (
+                    x=robot_data["x"],
+                    y=robot_data["y"],
+                    rotation=robot_data["rotation"],
+                    state=None
+                )
+            else:
+                self.robot.x = robot_data["x"]
+                self.robot.y = robot_data["y"]
+                self.robot.rotation = robot_data["rotation"]
+            
+        
         self.goalB = scene["goal_b"]
         self.balls = []
 
         if scene["orange_ball"] is not None:
-            self.balls.append({
-                "type": "orange",
-                "position": scene["orange_ball"]
-            })
+            for ball in scene["orange_ball"]:
+                self.balls.append(
+                    Ball(
+                        ball["x"],
+                        ball["y"],
+                        True
+                    )
+                )
 
-        for ball in scene["white_balls"]:
-            self.balls.append({
-                "type": "white",
-                "position": ball
-            })
-
-        print("Robot:", self.robot)
-        print("Goal B:", self.goalB)
-        print("Balls:", self.balls)
+        if scene["white_balls"] is not None:
+            for ball in scene["white_balls"]:
+                self.balls.append(
+                    Ball(
+                        ball["x"],
+                        ball["y"],
+                        False
+                    )
+                )
     
     def updateBalls(self, _balls):
         if _balls is not None:
@@ -69,35 +90,17 @@ class MainController():
                 return ball
         return None
     
-
-    def findNearestBall(self):
+    def findNearestWhiteBall(self):
         if len(self.balls) == 0:
             return None
-
-        robot_x = self.robot["x"]
-        robot_y = self.robot["y"]
 
         return min(
             self.balls,
             key=lambda ball: math.hypot(
-                ball["position"]["x"] - robot_x,
-                ball["position"]["y"] - robot_y
+                ball["position"]["x"] - self.robot.x,
+                ball["position"]["y"] - self.robot.y
             )
         )
-
-    def selectTarget(self):
-        #TODO add orange ball detection
-
-        nearest_ball = self.findNearestBall()
-
-        if nearest_ball is not None:
-            self.currentTarget = nearest_ball
-            self.currentState = "DriveToBall"
-            return nearest_ball
-
-        self.currentTarget = None
-        self.currentState = "Finished"
-        return None
 
     def distanceToTarget(self):
         if self.currentTarget is None:
@@ -107,25 +110,6 @@ class MainController():
             self.currentTarget["position"]["x"] - self.robot["x"],
             self.currentTarget["position"]["y"] - self.robot["y"]
         )
-
-    def angleToTarget(self):
-        if self.currentTarget is None:
-            return None
-
-        dx = self.currentTarget["position"]["x"] - self.robot["x"]
-        dy = self.currentTarget["position"]["y"] - self.robot["y"]
-
-        target_angle = math.degrees(math.atan2(dy, dx))
-        robot_heading = self.robot.get("heading", 0)
-
-        angle_diff = target_angle - robot_heading
-
-        while angle_diff > 180:
-            angle_diff -= 360
-        while angle_diff < -180:
-            angle_diff += 360
-
-        return angle_diff
 
     def isAtGoal(self):
         if self.currentTarget is None:
@@ -138,79 +122,67 @@ class MainController():
 
         return distance < GOAL_THRESHOLD
 
-    def decideNextAction(self):
-        print("Current state:", self.currentState)
-
-    # SELECT TARGET
-        if self.currentState == "SelectTarget":
-            target = self.selectTarget()
-
-            if target is None:
-                self.currentState = "Finished"
-                self.commands.append("Stop")
-                return "Stop"
-
-            return "Continue"
-
-    # DRIVE TO BALL
-        elif self.currentState == "DriveToTarget":
-            distance = self.distanceToTarget()
-            print("Distance to target:", distance)
-
-            if distance > DISTANCE_THRESHOLD:
-                self.commands.append("DriveForward")
-                return "DriveForward"
-
-            self.currentState = "AlignWithBall"
-            return "Continue"
-
-    # ALIGN WITH BALL
-        elif self.currentState == "AlignWithTarget":
-            angle = self.angleToTarget()
-            print("Angle to target:", angle)
-
-            if abs(angle) > ANGLE_THRESHOLD:
-                if angle > 0:
-                    self.commands.append("TurnLeft")
-                    return "TurnLeft"
+    def updateRobotState(self):
+        
+        if self.robot is None:
+            print("No robot detected, skipping state update")
+            return
+        
+        if self.currentState is None:
+            self.currentState = "FindNearestBall"
+            return
+    
+        match(self.currentState):
+            #State "FindNearestBall"
+            case "FindNearestBall":
+                if self.robot.target is not None:
+                    self.currentState="AlignWithTarget"
+                    raise "Changed state"
+                
+                self.robot.target = self.robot.findNearestBall(self.balls)
+                self.currentState = "AlignWithTarget"
+                
+            #State align to target
+            case "AlignWithTarget":
+                
+                if self.robot.target is None:
+                    self.currentState = "FindNearestBall"
+                    raise "Changed state"
+                
+                targetAngle = getAngle(self.robot.x,
+                                       self.robot.y,
+                                       self.robot.target.x,
+                                       self.robot.target.y
+                )
+                delta = self.robot.getDeltaAngle(targetAngle)
+                if(delta>0):
+                    self.commandsQueue.append("LEFT_TIMED::1.0") #TODO CALCULATE TIME
                 else:
-                    self.commands.append("TurnRight")
-                    return "TurnRight"
-
-            self.currentState = "PushBallToGoal"
-            return "Continue"
-
-    # PUSH BALL TO GOAL
-        elif self.currentState == "PushBallToGoal":
-            if self.isAtGoal():
-                self.currentState = "DeliverBall"
-                return "Continue"
-
-            self.commands.append("PushForward")
-            return "PushForward"
-
-    # DELIVER BALL
-        elif self.currentState == "DeliverBall":
-            self.deliveredBalls += 1
-            print("Delivered balls:", self.deliveredBalls)
-
-            if self.currentTarget in self.balls:
-                self.balls.remove(self.currentTarget)
-
-            self.currentTarget = None
-            self.currentState = "SelectTarget"
-            return "Continue"
-
-    # FINISHED
-        elif self.currentState == "Finished":
-            self.commands.append("Stop")
-            return "Stop"
+                    self.commandsQueue.append("RIGHT_TIMED::1.0") #TODO CALCULATE TIME
+                
+            case "MoveTowardsTarget":
+                d = getDistance(self.robot.x,self.robot.y,self.robot.target.x,self.robot.target.y)
+                
+                if not self.robot.isFacingTarget(getAngle(self.robot.x,self.robot.y,self.robot.target.x,self.robot.target.y)):
+                    self.currentState="AlignWithTarget"
+                    raise "changed state"
+                
+                if abs(d)<ROBOTCONFIG["distanceTolerance"]:
+                    if self.robot.target is Ball:
+                        self.currentState = "PickupBall"
+                    else:
+                        self.currentState = "DropBall"
+                
+                self.commandsQueue.append("FORWARD_TIMED::2.0") #TODO Calculate time
+                
+            case _:
+                self.currentState = "Stop"
 
     def passCommandToRobot(self):
-        if len(self.commands) == 0:
+        if len(self.commandsQueue) == 0:
             return None
 
-        command = self.commands.popleft()
+        command = self.commandsQueue.pop(0)
         print("[COMMAND]:", command)
         return command
     

@@ -139,6 +139,8 @@ def detect_boundary_cross(image: np.ndarray):
     red_mask = build_mask(hsv,COLOR_CONFIG["boundary"])
     lines = cv.HoughLinesP(red_mask, rho=1, theta=np.pi/180, threshold=100, minLineLength=100, maxLineGap=20)
 
+    if lines is None:
+        return
     points =    [(line[0][0],line[0][1]) for line in lines] + \
                 [(line[0][2],line[0][3]) for line in lines]
     top = min(points,key=lambda p: p[1])

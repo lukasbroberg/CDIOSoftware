@@ -1,4 +1,4 @@
-
+import threading
 import numpy as np
 import cv2 as cv
 from config.config_rules import COLOR_CONFIG, MIN_AREA
@@ -7,6 +7,13 @@ from ImageProcessing.detection import detect_objects, detect_boundary_lines, det
 from draw.draw import draw_results
 from controller.mainController import *
 from config.arucoConfig import aruco_config 
+from controller.sceneAdapter import *
+from connect import establish_connection, send_controller_command, send_command, establishWriteReadConnection, sendCommandReq
+import asyncio
+
+
+latest_scene = None
+latest_frame_data = None
 
 #Doesnt work right now
 def on_mouse_click(event, x, y, flags, params):
@@ -30,35 +37,6 @@ def generate_aruco_marker():
     cv.imshow("Marker", img)
     cv.imwrite("aruco"+str(id)+".png", img)
     cv.waitKey(0)
-
-def main():
-    print("MAIN STARTED")
-    
-    image_rec_active = True
-    image_rec_from_live_video(image_rec_active)
-    
-    #generate_aruco_marker()
-    
-    
-    #image_path = "images/capture3.png"
-    #picture = loadImage(image_path)
-    
-    #Raw picture
-    #cv.imshow("Displayed image",picture)
-    #image_hsv = cv.cvtColor(picture, cv.COLOR_BGR2HSV)    
-    
-    #Detection pictures
-    #detections = detect_objects(picture)
-    #lines, final_boundaries = detect_boundary_lines(picture)
-    #goals = detect_goals_from_lines(final_boundaries)
-    
-    #output = draw_results(picture, detections, final_boundaries, goals)
-    
-    #cv.imshow("Detections", output)
-    #cv.setMouseCallback("Detections", on_mouse_click, param={"image": picture, "hsv": image_hsv})
-    
-    #cv.waitKey(0)
-    #cv.destroyAllWindows()
     
 
 def setup_trackbars(window_name: str = "Camera") -> None:
@@ -115,10 +93,69 @@ def get_params(window_name: str = "Camera") -> dict:
         ),
     }
 
+def init_camera():
+    cam = cv.VideoCapture(0)
+    if not cam.isOpened():
+        print("Camera could not be opened")
+        return None
+    return cam
+
+def capture_frame(cam):
+    ret, frame = cam.read()
+    return frame if ret else None
+
+def run_detection(frame, config):
+    detections = detect_objects(frame, config)
+    lines, final_boundaries = detect_boundary_lines(frame)
+    image_cropped = mask_image_by_walls(frame, final_boundaries)
+    goals = detect_goals_from_aruco(frame)
+    robot_pos, robot_angle, raw_pts = detect_robot_from_aruco(image_cropped)
+    cross_boundary = detect_boundary_cross(image_cropped)
+    return detections, final_boundaries, goals, robot_pos, robot_angle, raw_pts, cross_boundary
+
+def update_config_from_trackbars(config, params):
+    wh = params["hsv"]["white"]
+    og = params["hsv"]["orange"]
+    config["white_ball"]["lower"] = np.array([wh[0], wh[2], wh[4]])
+    config["white_ball"]["upper"] = np.array([wh[1], wh[3], wh[5]])
+    config["orange_ball"]["lower"] = np.array([og[0], og[2], og[4]])
+    config["orange_ball"]["upper"] = np.array([og[1], og[3], og[5]])
+    return config
+
+def draw_output(frame, detections, final_boundaries, goals, robot_angle, raw_pts, cross_boundary, image_rec_active):
+    if image_rec_active:
+        robot_pos_formatted = np.array(raw_pts, dtype=np.int32) if raw_pts is not None else None
+        output = draw_results(frame, detections, final_boundaries, goals, robot_pos_formatted, robot_angle, cross_boundary)
+        cv.imshow('Camera', output)
+    else:
+        cv.imshow('Camera', frame)
+        
+def handle_keypresses(image_rec_active, runLoop):
+    key = cv.waitKey(1)
+    if key == ord('q'):
+        return image_rec_active, runLoop, True   # True = quit
+    if key == ord('d'):
+        image_rec_active = not image_rec_active
+        print("Image rec:", image_rec_active)
+    if key == ord('s'):
+        runLoop = not runLoop
+        print("Run loop:", runLoop)
+    return image_rec_active, runLoop, False
+        
+async def run_controller(controller: MainController, scene, reader, writer):
+    controller.initializeObjects(scene)
+    controller.updateRobotState()
+    if len(controller.commandsQueue) > 0:
+        response: str = await send_command(reader, writer, controller.passCommandToRobot())
+        return response
+    #return "DONE::NoCommand"
+            
+            
 #Static function get objects from a static image - use for testing.
 def image_rec_from_static_image():
     image_path = "images/test_image_aruco1.png"
     picture = loadImage(image_path)
+    mainController = MainController()
     
     #Raw picture
     cv.imshow("Displayed image",picture)
@@ -131,13 +168,18 @@ def image_rec_from_static_image():
     config = COLOR_CONFIG
     
     detections = detect_objects(image_cropped_by_boundaries, config)
+    
 
     goals = detect_goals_from_aruco(picture)
     robot_pos, robot_angle, raw_pts = detect_robot_from_aruco(image_cropped_by_boundaries)
     cross_boundary = detect_boundary_cross(image_cropped_by_boundaries)
     robot_pos_formatted = np.array(raw_pts,dtype=np.int32)
-    output = draw_results(picture, detections, final_boundaries, goals, robot_pos_formatted, robot_angle, cross_boundary)
     
+    scene = build_scene_from_camera(detections, goals, robot_pos, robot_angle)
+    mainController.initializeObjects(scene)
+
+    
+    output = draw_results(picture, detections, final_boundaries, goals, robot_pos_formatted, robot_angle, cross_boundary)
     
     
     cv.imshow("Detections", output)
@@ -148,90 +190,66 @@ def image_rec_from_static_image():
     
 
 #Live loop of camera
-def image_rec_from_live_video(image_rec_active: bool):
-    print("CAMERA FUNCTION STARTED")
-
-    cam = cv.VideoCapture(0)
-
-    if not cam.isOpened():
-        print("Camera could not be opened")
+async def image_rec_from_live_video(image_rec_active: bool, runLoop: bool):
+    cam = init_camera()
+    if cam is None:
         return
-    
-    frame_width = int(cam.get(cv.CAP_PROP_FRAME_WIDTH))
-    frame_height = int(cam.get(cv.CAP_PROP_FRAME_HEIGHT))
 
-
-    #INITIALIZE VALUES - Koden kører en enkelt gang og ikke mere
-    controller = MainController() 
-    
-    trackbars_ready = False
-    show_trackbars = False
-    
+    controller = MainController()
     config = COLOR_CONFIG
-    
-    
+    reader, writer = await establishWriteReadConnection()
 
-    #EACH FRAME - Koden kører for hvert billede i sekundet fra kameraet
+    tasks = [asyncio.create_task(camera_task(cam, config, image_rec_active))]
+    if runLoop:
+        tasks.append(asyncio.create_task(control_task(controller, reader, writer)))
+
+    await asyncio.gather(*tasks)
+
+    cam.release()
+    cv.destroyAllWindows()
+
+async def camera_task(cam, config, image_rec_active):
+    
+    loop = asyncio.get_event_loop()
+    
+    global latest_scene, latest_frame_data
+    loop = asyncio.get_event_loop()
+
     while True:
-        #Get trackbar values
-        params = get_params() 
-        if show_trackbars:
-            wh = params["hsv"]["white"]
-            og = params["hsv"]["orange"]
-            # White ball
-            config["white_ball"]["lower"] = np.array([wh[0], wh[2], wh[4]])
-            config["white_ball"]["upper"] = np.array([wh[1], wh[3], wh[5]])
-
-            # Orange ball
-            config["orange_ball"]["lower"] = np.array([og[0], og[2], og[4]])
-            config["orange_ball"]["upper"] = np.array([og[1], og[3], og[5]])
-        
-        #Get camera frame
-        ret, frame = cam.read()   
-        
-
+        frame = await loop.run_in_executor(None, capture_frame, cam)
         if frame is None:
             continue
         
-            
-        #Detecetions
-        if image_rec_active:
-            detections = detect_objects(frame, config)
-            lines, final_boundaries = detect_boundary_lines(frame)
-            image_cropped_by_boundaries = mask_image_by_walls(frame,final_boundaries)
-            goals = detect_goals_from_aruco(frame)
-            robot_pos, robot_angle, raw_pts = detect_robot_from_aruco(image_cropped_by_boundaries)
-            cross_boundary = detect_boundary_cross(image_cropped_by_boundaries)
-            
-            #Format robot_pos for drawing
-            robot_pos_formatted = None
-            if(raw_pts is not None):
-                robot_pos_formatted = np.array(raw_pts,dtype=np.int32)
-            
-            output = draw_results(frame, detections, final_boundaries, goals, robot_pos_formatted, robot_angle, cross_boundary)
-                
-            # Display the captured frame
-            cv.imshow('Camera', output)
-            
-            if not trackbars_ready and show_trackbars is True:
-                setup_trackbars('Camera')
-                trackbars_ready = True
-        else:
-            cv.imshow('Camera', frame)
 
+        detections, final_boundaries, goals, robot_pos, robot_angle, raw_pts, cross_boundary = run_detection(frame, config)
+        latest_scene = build_scene_from_camera(detections, goals, robot_pos, robot_angle)
+        latest_frame_data = (frame, detections, final_boundaries, goals, robot_angle, raw_pts, cross_boundary)
 
-        # Press 'q' to exit the loop
+        draw_output(frame, detections, final_boundaries, goals, robot_angle, raw_pts, cross_boundary, image_rec_active)
+
         if cv.waitKey(1) == ord('q'):
             break
-        if cv.waitKey(1) == ord('d'):
-            if image_rec_active==False:
-                image_rec_active=True
-            else:
-                image_rec_active=False
-            print(image_rec_active)
 
-    cam.release()
-    #out.release()
-    cv.destroyAllWindows()
-if __name__ == "__main__":  
-    main()
+async def control_task(controller, reader, writer):
+    global latest_scene
+
+    while True:
+        if latest_scene is None:
+            await asyncio.sleep(0.1)  # wait for camera to produce a scene
+            continue
+
+        response = await run_controller(controller, latest_scene, reader, writer)
+        if response is None:
+            print("no response")
+            await asyncio.sleep(1.0)
+            continue
+
+        parts = response.split("::")
+        if parts[0] == "DONE":
+            await asyncio.sleep(5.0)  # wait before next command
+
+async def main():
+    await image_rec_from_live_video(image_rec_active=True, runLoop=True)
+
+if __name__ == "__main__":
+    asyncio.run(main())    

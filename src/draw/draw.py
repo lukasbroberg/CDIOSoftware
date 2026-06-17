@@ -30,6 +30,7 @@ def draw_results(image: np.ndarray, detectections: list[dict], lines: list = Non
         for i, line in enumerate(lines):
             if line is None or len(line) != 5:
                 continue
+            
             x1,y1,x2,y2,label = line
         
             cv.line(output,(x1,y1),(x2,y2),(200,0,0),5)
@@ -50,6 +51,8 @@ def draw_results(image: np.ndarray, detectections: list[dict], lines: list = Non
         
     if cross_boundary is not None:
         for i, line in enumerate(cross_boundary):
+            if line is None or len(line) != 5:
+                continue
             x1,y1,x2,y2,label = line
             cv.line(output,(x1,y1),(x2,y2),(255,255,0),2)
             cv.putText(output, str(label),(x1,y1),1,2,(0,0,0),2,None,None)

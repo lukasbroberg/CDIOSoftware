@@ -44,4 +44,15 @@ while(keep_connection):
         break
     
     s.sendall((cmd+"\n").encode("utf-8"))
+
+    buffer = b""
+    while b"\n" not in buffer:
+        data = s.recv(1024)
+        if not data:
+            raise RuntimeError("Robot disconnected")
+        buffer += data
+
+    response = buffer.decode("utf-8").strip()
+    
     print("command: " + str(cmd) + " sent")
+    print("Svar fra robot:", response)

@@ -1,3 +1,5 @@
+
+
 def bbox_center(box):
     x1, x2, y1, y2 = box[:4]
     return {
@@ -22,16 +24,17 @@ def build_scene_from_camera(detections, goals, robot_pos, robot_angle):
     for det in detections:
         label = det["label"]
 
-        if label == "orange":
+        if label == "orange_ball":
             orange_ball.append(detection_to_point(det))
 
-        elif label == "white":
+        elif label == "white_ball":
             white_balls.append(detection_to_point(det))
 
     if robot_pos is not None:
+        x1,y1,x2,y2 = robot_pos
         robot = {
-            "x": robot_pos.x1+(robot_pos.x2-robot_pos.x1)/2,
-            "y": robot_pos.y1+(robot_pos.y2-robot_pos.y1)/2,
+            "x": x1+(x2-x1)/2,
+            "y": y1+(y2-y1)/2,
             "rotation": robot_angle
         }
 
