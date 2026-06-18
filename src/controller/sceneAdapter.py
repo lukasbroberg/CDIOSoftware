@@ -17,6 +17,7 @@ def detection_to_point(det):
 
 
 def build_scene_from_camera(detections, goals, robot_pos, robot_angle):
+        
     robot = None
     orange_ball = []
     white_balls = []
@@ -31,7 +32,7 @@ def build_scene_from_camera(detections, goals, robot_pos, robot_angle):
             white_balls.append(detection_to_point(det))
 
     if robot_pos is not None:
-        x1,y1,x2,y2 = robot_pos
+        x1,x2,y1,y2 = robot_pos
         robot = {
             "x": x1+(x2-x1)/2,
             "y": y1+(y2-y1)/2,

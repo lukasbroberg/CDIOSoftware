@@ -45,17 +45,24 @@ class Robot:
             )
         )
     
-    def getDeltaAngle(self, targetAngle):
-        if targetAngle is None:
+    def getDeltaAngle(self, targetAngle_deg):
+        if targetAngle_deg is None:
             return None
         
-        delta = (targetAngle - self.rotation) % 360;
-        if (delta > 180): delta -= 360;
-        if (delta < -180): delta += 360;
+        
+        # 3. FIX THE FLIPPED MARKER: Add 180 degrees because the ArUco 
+        # thinks the back of the robot is the front.
+        robot_deg = (self.rotation) % 360
+        
+        # 4. Find the shortest steering delta
+        delta = (targetAngle_deg - robot_deg + 180) % 360 - 180
         return delta
 
-    def isFacingTarget(self, targetAngle, tolerance = ROBOTCONFIG["angleTolerance"]):
-        return abs(self.getDeltaAngle(targetAngle)) <= tolerance;
+    def isFacingTarget(self, tolerance = ROBOTCONFIG["angleTolerance"]):
+        if self.target is None:
+            return False
+        isFacing = abs(self.getDeltaAngle(getAngle(self.x,self.y,self.target.x,self.target.y))) <= tolerance;
+        return isFacing
 
     def setTarget(self, target):
         self.target = target

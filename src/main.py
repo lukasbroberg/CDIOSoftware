@@ -4,7 +4,7 @@ import cv2 as cv
 from config.config_rules import COLOR_CONFIG, MIN_AREA
 from ImageProcessing.image import loadImage, mask_image_by_walls
 from ImageProcessing.detection import detect_objects, detect_boundary_lines, detect_goals_from_lines, detect_goals_from_aruco, detect_robot_from_aruco, detect_boundary_cross
-from draw.draw import draw_results
+from draw.draw import draw_detections,draw_lines,draw_goals,draw_robot,draw_cross_boundary, draw_target
 from controller.mainController import *
 from config.arucoConfig import aruco_config 
 from controller.sceneAdapter import *
@@ -94,7 +94,7 @@ def get_params(window_name: str = "Camera") -> dict:
     }
 
 def init_camera():
-    cam = cv.VideoCapture(0)
+    cam = cv.VideoCapture(1)
     if not cam.isOpened():
         print("Camera could not be opened")
         return None
@@ -122,10 +122,20 @@ def update_config_from_trackbars(config, params):
     config["orange_ball"]["upper"] = np.array([og[1], og[3], og[5]])
     return config
 
-def draw_output(frame, detections, final_boundaries, goals, robot_angle, raw_pts, cross_boundary, image_rec_active):
+def draw_output(frame, detections, final_boundaries, goals, robot_angle, raw_pts, cross_boundary, image_rec_active, target: Ball = None):
     if image_rec_active:
+        output = frame.copy()
+        
         robot_pos_formatted = np.array(raw_pts, dtype=np.int32) if raw_pts is not None else None
-        output = draw_results(frame, detections, final_boundaries, goals, robot_pos_formatted, robot_angle, cross_boundary)
+        output = draw_detections(frame, detections)
+        output = draw_lines(frame, final_boundaries)
+        output = draw_goals(frame, goals)
+        output = draw_robot(frame, robot_pos_formatted, robot_angle)
+        output = draw_cross_boundary(frame, cross_boundary)
+        
+        if(target is not None):
+            output = draw_target(output,target)
+        
         cv.imshow('Camera', output)
     else:
         cv.imshow('Camera', frame)
@@ -149,13 +159,13 @@ async def run_controller(controller: MainController, scene, reader, writer):
         response: str = await send_command(reader, writer, controller.passCommandToRobot())
         return response
     #return "DONE::NoCommand"
-            
-            
+       
 #Static function get objects from a static image - use for testing.
 def image_rec_from_static_image():
+    global main_controller
     image_path = "images/test_image_aruco1.png"
     picture = loadImage(image_path)
-    mainController = MainController()
+    main_controller = MainController()
     
     #Raw picture
     cv.imshow("Displayed image",picture)
@@ -176,10 +186,10 @@ def image_rec_from_static_image():
     robot_pos_formatted = np.array(raw_pts,dtype=np.int32)
     
     scene = build_scene_from_camera(detections, goals, robot_pos, robot_angle)
-    mainController.initializeObjects(scene)
+    main_controller.initializeObjects(scene)
 
     
-    output = draw_results(picture, detections, final_boundaries, goals, robot_pos_formatted, robot_angle, cross_boundary)
+    output = draw_output(picture, detections, final_boundaries, goals, robot_pos_formatted, robot_angle, cross_boundary)
     
     
     cv.imshow("Detections", output)
@@ -191,17 +201,18 @@ def image_rec_from_static_image():
 
 #Live loop of camera
 async def image_rec_from_live_video(image_rec_active: bool, runLoop: bool):
+    global main_controller
     cam = init_camera()
     if cam is None:
         return
 
-    controller = MainController()
+    main_controller = MainController()
     config = COLOR_CONFIG
     reader, writer = await establishWriteReadConnection()
 
     tasks = [asyncio.create_task(camera_task(cam, config, image_rec_active))]
     if runLoop:
-        tasks.append(asyncio.create_task(control_task(controller, reader, writer)))
+        tasks.append(asyncio.create_task(control_task(main_controller, reader, writer)))
 
     await asyncio.gather(*tasks)
 
@@ -212,7 +223,7 @@ async def camera_task(cam, config, image_rec_active):
     
     loop = asyncio.get_event_loop()
     
-    global latest_scene, latest_frame_data
+    global latest_scene, latest_frame_data, main_controller
     loop = asyncio.get_event_loop()
 
     while True:
@@ -225,7 +236,18 @@ async def camera_task(cam, config, image_rec_active):
         latest_scene = build_scene_from_camera(detections, goals, robot_pos, robot_angle)
         latest_frame_data = (frame, detections, final_boundaries, goals, robot_angle, raw_pts, cross_boundary)
 
-        draw_output(frame, detections, final_boundaries, goals, robot_angle, raw_pts, cross_boundary, image_rec_active)
+        target = main_controller.robot.target if main_controller and main_controller.robot else None
+
+        draw_output(
+            frame, 
+            detections, 
+            final_boundaries, 
+            goals, robot_angle, 
+            raw_pts, 
+            cross_boundary, 
+            image_rec_active,
+            target=main_controller.robot.target if main_controller and main_controller.robot else None
+        )
 
         if cv.waitKey(1) == ord('q'):
             break

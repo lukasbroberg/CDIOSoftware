@@ -14,9 +14,9 @@ def read_key():
 
 KEY_MAP = {
     "w": "FORWARD_TIMED::2",
-    "a": "LEFT_TIMED::2",
+    "a": "LEFT_TIMED::6.5",
     "s": "BACKWARD_TIMED::2",
-    "d": "RIGHT_TIMED::2",
+    "d": "RIGHT_TIMED::6.5",
     "c": "COLLECT",
     "r": "RELEASE",
     " ": "STOP",
