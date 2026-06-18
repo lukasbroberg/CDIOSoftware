@@ -60,6 +60,7 @@ def draw_robot(output: np.ndarray, robot: list = None, robot_angle: float = None
         cv.putText(output,"robot",[robot][0][0]+(10,0),1,2,(0,255,100),2,None,None)
         if robot_angle is not None:
             cv.putText(output,"angle: " + str(robot_angle),[robot][0][0]+(10,50),1,2,(0,0,0),2,None,None)
+            cv.putText(output,"pos: " + str([robot][0][0]),[robot][0][0]+(10,100),1,2,(0,0,0),2,None,None)
     return output
 
 def draw_cross_boundary(output: np.ndarray, cross_boundary: list = None):

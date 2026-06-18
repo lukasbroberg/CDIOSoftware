@@ -55,7 +55,7 @@ class Robot:
         robot_deg = (self.rotation) % 360
         
         # 4. Find the shortest steering delta
-        delta = (targetAngle_deg - robot_deg + 180) % 360 - 180
+        delta = (targetAngle_deg - robot_deg ) % 360 - 180
         return delta
 
     def isFacingTarget(self, tolerance = ROBOTCONFIG["angleTolerance"]):

@@ -35,7 +35,7 @@ class MainController():
             else:
                 self.robot.x = robot_data["x"]
                 self.robot.y = robot_data["y"]
-                self.robot.rotation = robot_data["rotation"]
+                self.robot.rotation = robot_data["rotation"]-90
         if self.largeGoal is None:
             self.largeGoal = Goal(scene["goal_b"]["x"], scene["goal_b"]["y"])
         
@@ -97,8 +97,10 @@ class MainController():
         )
 
         return distance < GOAL_THRESHOLD
+    
 
     def updateRobotState(self):
+        print("robot pos: ", self.robot.x, self.robot.y)
         
         print("---State: " + str(self.currentState) + "---")
         
