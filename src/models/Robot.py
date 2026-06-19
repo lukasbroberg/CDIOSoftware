@@ -12,6 +12,7 @@ class Robot:
         self.rotation = rotation
         self.target = None
         self.pickedUpBalls = 0
+        self.deliveredBalls = 0
     
     def findNearestBall(self, balls: list[Ball]):
         nearest = None
@@ -47,6 +48,11 @@ class Robot:
                 ball["position"]["y"] - robot_y
             )
         )
+        
+    def setTarget(self, target):
+        self.target = target
+        target.x = target.x + ROBOTCONFIG['targetOffsetX']
+        target.y = target.y + ROBOTCONFIG['targetOffsetY']
     
     def getDeltaAngle(self, targetAngle_deg):
         if targetAngle_deg is None:

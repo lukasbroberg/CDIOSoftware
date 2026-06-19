@@ -2,7 +2,8 @@ import threading
 import numpy as np
 import cv2 as cv
 from config.config_rules import COLOR_CONFIG, MIN_AREA
-from ImageProcessing.image import loadImage, mask_image_by_walls
+from ImageProcessing.image import loadImage, mask_image_by_walls, color_correct_with_reference
+from ImageProcessing.DynamicExposureManager import DynamicExposureManager
 from ImageProcessing.detection import detect_objects, detect_boundary_lines, detect_goals_from_lines, detect_goals_from_aruco, detect_robot_from_aruco, detect_boundary_cross
 from draw.draw import draw_detections,draw_lines,draw_goals,draw_robot,draw_cross_boundary, draw_target
 from controller.mainController import *
@@ -105,6 +106,8 @@ def capture_frame(cam):
     return frame if ret else None
 
 def run_detection(frame, config):
+    #hvid_reference_boks = (10,10, 50, 50)
+    #frame = color_correct_with_reference(frame,hvid_reference_boks)
     lines, final_boundaries = detect_boundary_lines(frame)
     image_cropped = mask_image_by_walls(frame, final_boundaries)
     detections = detect_objects(image_cropped, config)
@@ -123,9 +126,11 @@ def update_config_from_trackbars(config, params):
     return config
 
 def draw_output(frame, detections, final_boundaries, goals, robot_angle, raw_pts, cross_boundary, image_rec_active, target: Ball = None):
+    #hvid_reference_boks = (1000,1000, 5, 5)
+    #frame = color_correct_with_reference(frame,hvid_reference_boks)
+    
     if image_rec_active:
         output = frame.copy()
-        
         robot_pos_formatted = np.array(raw_pts, dtype=np.int32) if raw_pts is not None else None
         output = draw_detections(frame, detections)
         output = draw_lines(frame, final_boundaries)
@@ -152,10 +157,10 @@ def handle_keypresses(image_rec_active, runLoop):
         print("Run loop:", runLoop)
     return image_rec_active, runLoop, False
         
-async def run_controller(controller: MainController, scene, reader, writer):
+async def run_controller(controller: MainController, scene, reader, writer, sendCommands: bool = True):
     controller.initializeObjects(scene)
     controller.updateRobotState()
-    if len(controller.commandsQueue) > 0:
+    if sendCommands is True and len(controller.commandsQueue) > 0:
         response: str = await send_command(reader, writer, controller.passCommandToRobot())
         return response
     #return "DONE::NoCommand"
@@ -178,7 +183,6 @@ def image_rec_from_static_image():
     config = COLOR_CONFIG
     
     detections = detect_objects(image_cropped_by_boundaries, config)
-    
 
     goals = detect_goals_from_aruco(picture)
     robot_pos, robot_angle, raw_pts = detect_robot_from_aruco(image_cropped_by_boundaries)
@@ -226,11 +230,26 @@ async def camera_task(cam, config, image_rec_active):
     
     global latest_scene, latest_frame_data, main_controller
     loop = asyncio.get_event_loop()
+    
+    #trackbars_initialized = False
+
+    #dem = DynamicExposureManager(cam, start_exposure=100, min_exposure=-5, max_exposure=20)
+    
 
     while True:
         frame = await loop.run_in_executor(None, capture_frame, cam)
+        #frame = dem.process_frame(frame)
+        
         if frame is None:
             continue
+        
+        
+        #if not trackbars_initialized:
+        #    setup_trackbars("Camera")
+        #    trackbars_initialized = True
+            
+        #params = get_params("Camera")
+        #config = update_config_from_trackbars(config, params)
 
         detections, final_boundaries, goals, robot_pos, robot_angle, raw_pts, cross_boundary = run_detection(frame, config)
         latest_scene = build_scene_from_camera(detections, goals, robot_pos, robot_angle)
@@ -259,8 +278,9 @@ async def control_task(controller, reader, writer):
         if latest_scene is None:
             await asyncio.sleep(0.1)  # wait for camera to produce a scene
             continue
-
-        response = await run_controller(controller, latest_scene, reader, writer)
+        
+        response = await run_controller(controller, latest_scene, reader, writer,False)
+        
         if response is None:
             print("no response")
             await asyncio.sleep(1.0)

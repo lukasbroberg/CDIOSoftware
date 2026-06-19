@@ -6,8 +6,8 @@ COLOR_CONFIG = {
     "orange_ball": {
         # Orange sits near red's high edge → hue 5-18 works well for a ping-pong ball
         "kernel": cv.getStructuringElement(cv.MORPH_RECT, (5,5)),
-        "lower": np.array([15,  110,  168]),
-        "upper": np.array([35, 255, 255]),
+        "lower": np.array([15,  170,  138]),
+        "upper": np.array([50, 255, 255]),
         "draw_color": (0, 140, 255),   # BGR – orange for display
     },
     "white_ball": {
@@ -29,5 +29,5 @@ COLOR_CONFIG = {
 }
 
 #Doesnt recognize objects small than (in pxs):
-MIN_AREA = 800
-MAX_AREA = 2000
+MIN_AREA = 300
+MAX_AREA = 900

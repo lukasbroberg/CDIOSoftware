@@ -37,8 +37,11 @@ def detect_objects(image: np.ndarray, config) -> list[dict]:
                 "area": area,
                 "color": cfg["draw_color"],
             })
+    
+    #Filter results from boundaries, as they are detected in another detction
+    filtered_results = [obj for obj in results if obj["label"] != "boundary"]
             
-    return results
+    return filtered_results
 
 #Detects the red boundary lines of the level
 def detect_boundary_lines(image: np.ndarray) -> list[dict]:
@@ -127,10 +130,10 @@ def detect_boundary_cross(image: np.ndarray):
     
     h,w = image.shape[:2]
     
-    top = h//4
-    bottom = h - h//4
-    left = w//4
-    right = w - w//4
+    top = h//3
+    bottom = h - h//3
+    left = w//3
+    right = w - w//3
     
     masked = np.zeros_like(image)
     masked[top:bottom, left:right] = image[top: bottom, left:right]

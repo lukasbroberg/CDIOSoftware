@@ -1,6 +1,6 @@
 ROBOTCONFIG = {
     'angleTolerance': 10,
-    'closeRangeTolerance': 17,
+    'closeRangeTolerance': 15,
     'distanceTolerance': 50,    # px — "close enough to goal" for RELEASE
     'collectOffset': 100,       # px — stop MoveToBall here, then COLLECT + ram forward
     'leastDistanceToBall': 150,
@@ -8,5 +8,8 @@ ROBOTCONFIG = {
     'dropOffOffset': 50,
     'bounadryOffset': 50,
     'fullTurnTime': 6.48,
-    'goalOffset': 300
+    'goalDropOffOffset': 300,
+    'goalAlignZoneOffset': 100,
+    'targetOffsetX': -40, 
+    'targetOffsetY': -40
 }

@@ -62,10 +62,12 @@ class MainController:
                     rotation=robot_data["rotation"] - 90,
                     state=None,
                 )
+                self.robot.pickedUpBalls=3
             else:
                 self.robot.x        = robot_data["x"]
                 self.robot.y        = robot_data["y"]
                 self.robot.rotation = robot_data["rotation"] - 90
+                self.robot.pickedUpBalls=3
 
         if self.largeGoal is None and scene.get("goal_b") is not None:
             self.largeGoal = Goal(scene["goal_b"]["x"], scene["goal_b"]["y"])
@@ -75,7 +77,7 @@ class MainController:
             self.balls.append(Ball(b["x"], b["y"], True))
         for b in (scene.get("white_balls") or []):
             self.balls.append(Ball(b["x"], b["y"], False))
-
+            
     #Gets the robots angle to target
     def _angle_to_target(self) -> float | None:
         t = self.robot.target
@@ -94,10 +96,30 @@ class MainController:
     def _find_best_ball(self) -> Ball | None:
         if not self.balls:
             return None
-        orange = next((b for b in self.balls if b.isOrange), None)
-        if orange:
-            return orange
         return self.robot.findNearestBall(self.balls)
+        #orange = next((b for b in self.balls if b.isOrange), None)
+        #if orange:
+        #    return orange
+    
+    def _find_best_white_ball(self) -> Ball | None:
+        if not self.balls:
+            return None
+        white_balls = []
+        for ball in self.balls:
+            if not ball.isOrange:
+                white_balls.append(ball)
+        return self.robot.findNearestBall(white_balls)
+    
+    def _find_best_orange_ball(self) -> Ball | None:
+        if not self.balls:
+            return None
+        orange_balls = []
+        for ball in self.balls:
+            if ball.isOrange:
+                orange_balls.append(ball)
+        if orange_balls is None or len(orange_balls) == 0:
+            return self._find_best_ball()
+        return self.robot.findNearestBall(orange_balls)
 
     #Queue commands
     def _enqueue_turn(self, delta: float):
@@ -130,7 +152,7 @@ class MainController:
         if self.commandsQueue:
             print(f"[STATE] Queue not empty ({len(self.commandsQueue)} pending) – skipping update")
             return
-
+        
         if self.currentState is None:
             self._go_to_state("FindBall", "init")
             return
@@ -147,13 +169,30 @@ class MainController:
 
             # 1. Choose a target ball
             case "FindBall":
-                ball = self._find_best_ball()
+                
+                print("Picked up balls ",self.robot.pickedUpBalls)
+                
+                if self.robot.pickedUpBalls >= BALLS_PER_TRIP:
+                    self.robot.setTarget(self.largeGoal)
+                    self._go_to_state("AlignWithGoal", f"need {BALLS_PER_TRIP - self.robot.pickedUpBalls} more")
+                    return
+                    
+                
+                ball = None
+                
+                if self.robot.deliveredBalls == 0 and self.robot.pickedUpBalls == 0:
+                    ball = self._find_best_white_ball()
+                elif self.robot.deliveredBalls == 0 and self.robot.pickedUpBalls == 1:
+                    ball = self._find_best_orange_ball()
+                else:
+                    ball = self._find_best_ball()
+                
                 if ball is None:
                     print("[STATE] No balls visible")
                     self._go_to_state("Stop", "no balls")
                     return
 
-                self.robot.target = ball
+                self.robot.setTarget(ball)
                 print(f"[STATE] Target → ({ball.x:.0f},{ball.y:.0f})  orange={ball.isOrange}")
                 self._go_to_state("AlignWithBall")
 
@@ -200,7 +239,7 @@ class MainController:
                 # re-checked frequently, but never smaller than MIN_DRIVE_PX.
                 # Sub-threshold gaps aren't worth a command; just enter
                 # PickupBall and let the ram-forward cover the last few px.
-                MIN_DRIVE_PX = 40
+                MIN_DRIVE_PX = 30
                 drive_px = min(d - ROBOTCONFIG["collectOffset"], 150)
                 if drive_px < MIN_DRIVE_PX:
                     self._go_to_state("PickupBall", "close enough")
@@ -212,7 +251,7 @@ class MainController:
                 d = self._distance_to_target()
                 # Accept anything within collectOffset + MIN_DRIVE_PX — that's
                 # the same boundary MoveToBall uses to enter this state.
-                MIN_DRIVE_PX = 40
+                MIN_DRIVE_PX = 30
                 if d is not None and d > ROBOTCONFIG["collectOffset"] + MIN_DRIVE_PX:
                     self._go_to_state("MoveToBall", "too far")
                     return
@@ -234,7 +273,7 @@ class MainController:
                     if self.largeGoal is None:
                         print("[STATE] Goal not yet detected – waiting")
                         return
-                    self.robot.target = self.largeGoal
+                    self.robot.setTarget(self.largeGoal)
                     self._go_to_state("AlignWithGoal", "quota reached")
 
             #  5. Rotate to face the goal 
@@ -262,14 +301,17 @@ class MainController:
                     return
 
                 d = self._distance_to_target()
-                #TODO FIX HER at den kører 0,04 commandoer for evigt.
                 print(f"[STATE] Distance to goal: {d:.0f} px")
 
-                if d <= ROBOTCONFIG["goalOffset"]:
+                if d <= ROBOTCONFIG["goalDropOffOffset"]:
                     self._go_to_state("DropBall", "in range")
                     return
 
-                drive_px = min(d - ROBOTCONFIG["goalOffset"], 150)
+                drive_px = min(d - ROBOTCONFIG["goalDropOffOffset"], 150)
+                #Safe quit to release ball, removes unlimited cycle of moving forward
+                if(drive_px<0.1):
+                    self._go_to_state("DropBall", "in range")
+                
                 self._enqueue_forward(drive_px)
 
             # 7. Release balls at goal
@@ -279,11 +321,12 @@ class MainController:
                     return
 
                 d = self._distance_to_target()
-                if d is not None and d > ROBOTCONFIG["goalOffset"]:
+                if d is not None and d > ROBOTCONFIG["goalDropOffOffset"]:
                     self._go_to_state("MoveToGoal", "too far")
                     return
 
                 self.commandsQueue.append("RELEASE")
+                self.robot.deliveredBalls += self.robot.pickedUpBalls
                 self.robot.pickedUpBalls = 0
                 self.robot.target = None
                 print("[STATE] Released all balls")

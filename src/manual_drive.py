@@ -31,7 +31,6 @@ VALUE_MAP = {
 
 keep_connection = True
 s = establish_connection()
-#s.sendall(("ON_CONNECTION"+"\n").encode("utf-8"))
 while(keep_connection):        
     key = read_key()
             

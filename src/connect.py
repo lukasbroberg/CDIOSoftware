@@ -52,4 +52,5 @@ async def sendCommandReq(reader, writer, command):
 
 async def establishWriteReadConnection():
     reader, writer = await asyncio.open_connection(ROBOT_IP,PORT)
+    
     return reader, writer
