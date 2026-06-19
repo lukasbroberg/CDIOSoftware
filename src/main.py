@@ -105,9 +105,9 @@ def capture_frame(cam):
     return frame if ret else None
 
 def run_detection(frame, config):
-    detections = detect_objects(frame, config)
     lines, final_boundaries = detect_boundary_lines(frame)
     image_cropped = mask_image_by_walls(frame, final_boundaries)
+    detections = detect_objects(image_cropped, config)
     goals = detect_goals_from_aruco(frame)
     robot_pos, robot_angle, raw_pts = detect_robot_from_aruco(image_cropped)
     cross_boundary = detect_boundary_cross(image_cropped)
@@ -211,6 +211,7 @@ async def image_rec_from_live_video(image_rec_active: bool, runLoop: bool):
     reader, writer = await establishWriteReadConnection()
 
     tasks = [asyncio.create_task(camera_task(cam, config, image_rec_active))]
+    
     if runLoop:
         tasks.append(asyncio.create_task(control_task(main_controller, reader, writer)))
 
@@ -230,7 +231,6 @@ async def camera_task(cam, config, image_rec_active):
         frame = await loop.run_in_executor(None, capture_frame, cam)
         if frame is None:
             continue
-        
 
         detections, final_boundaries, goals, robot_pos, robot_angle, raw_pts, cross_boundary = run_detection(frame, config)
         latest_scene = build_scene_from_camera(detections, goals, robot_pos, robot_angle)

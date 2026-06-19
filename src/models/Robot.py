@@ -19,6 +19,9 @@ class Robot:
 
         for i, ball in enumerate(balls):
             d = getDistance(self.x,self.y,ball.x,ball.y)
+            #Check if the ball is too close - might be the robot itself then.
+            if(d<ROBOTCONFIG['leastDistanceToBall']):
+                continue
             if nearest is None or nearestDist is None:
                 nearestDist=d
                 nearest=ball
@@ -52,7 +55,7 @@ class Robot:
         
         # 3. FIX THE FLIPPED MARKER: Add 180 degrees because the ArUco 
         # thinks the back of the robot is the front.
-        robot_deg = (self.rotation) % 360
+        robot_deg = (self.rotation + 180) % 360
         
         # 4. Find the shortest steering delta
         delta = (targetAngle_deg - robot_deg ) % 360 - 180

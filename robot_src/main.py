@@ -100,6 +100,8 @@ def IAMFART():
 
 def release_cycle():
     motor_a.on(SpeedPercent(80))
+    sleep(3.0)
+    motor_a.stop(stop_action="brake")
     
 COMMAND_MAP = {
     "A_ON": lambda: motor_a.on(SpeedPercent(-35)),
