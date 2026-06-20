@@ -39,13 +39,17 @@ def build_scene_from_camera(detections, goals, robot_pos, robot_angle):
             "rotation": robot_angle
         }
 
-    goal_b = None
-    if goals is not None and goals[0] is not None:
-        goal_b = bbox_center(goals[0])
+    goal_large = None
+    goal_small = None
+    if goals is not None and goals[0] is not None and goals[1] is not None:
+        goal_large = bbox_center(goals[0])
+        goal_small = bbox_center(goals[1])
+        
 
     return {
         "robot": robot,
-        "goal_b": goal_b,
+        "goal_large": goal_large,
         "orange_ball": orange_ball,
-        "white_balls": white_balls
+        "white_balls": white_balls,
+        "goal_small": goal_small
     }

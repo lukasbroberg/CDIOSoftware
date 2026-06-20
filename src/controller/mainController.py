@@ -41,7 +41,7 @@ class MainController:
     """
 
     def __init__(self):
-        self.commandsQueue: list[str] = []
+        self.commandsQueue: list[str] = ["COLLECT"]
         self.balls:         list[Ball] = []
         self.robot:         Robot | None = None
         self.largeGoal:     Goal  | None = None
@@ -62,15 +62,17 @@ class MainController:
                     rotation=robot_data["rotation"] - 90,
                     state=None,
                 )
-                self.robot.pickedUpBalls=3
             else:
                 self.robot.x        = robot_data["x"]
                 self.robot.y        = robot_data["y"]
                 self.robot.rotation = robot_data["rotation"] - 90
-                self.robot.pickedUpBalls=3
 
-        if self.largeGoal is None and scene.get("goal_b") is not None:
-            self.largeGoal = Goal(scene["goal_b"]["x"], scene["goal_b"]["y"])
+        if self.largeGoal is None and scene.get("goal_large") is not None:
+            self.largeGoal = Goal(scene["goal_large"]["x"], scene["goal_large"]["y"])
+
+        if self.smallGoal is None and scene.get("goal_small") is not None:
+            self.smallGoal = Goal(scene["goal_small"]["x"], scene["goal_small"]["y"])
+
 
         self.balls = []
         for b in (scene.get("orange_ball") or []):
@@ -244,7 +246,7 @@ class MainController:
                 if drive_px < MIN_DRIVE_PX:
                     self._go_to_state("PickupBall", "close enough")
                     return
-                self._enqueue_forward(drive_px)
+                self._enqueue_forward(float(drive_px))
 
             # 4. Collect ball, then back up
             case "PickupBall":
@@ -259,7 +261,8 @@ class MainController:
                 # Robot is already at collectOffset — run intake and back up.
                 # Two commands queued; the queue-guard above ensures state won't
                 # advance until both have been popped and executed.
-                self.commandsQueue.append("COLLECT")
+                #self.commandsQueue.append("COLLECT")
+                self._enqueue_forward(300.0)
                 self._enqueue_backward(ROBOTCONFIG["backupDistance"])
 
                 self.robot.pickedUpBalls += 1
@@ -270,10 +273,10 @@ class MainController:
                     self.robot.target = None
                     self._go_to_state("FindBall", f"need {BALLS_PER_TRIP - self.robot.pickedUpBalls} more")
                 else:
-                    if self.largeGoal is None:
+                    if self.smallGoal is None:
                         print("[STATE] Goal not yet detected – waiting")
                         return
-                    self.robot.setTarget(self.largeGoal)
+                    self.robot.setTarget(self.smallGoal)
                     self._go_to_state("AlignWithGoal", "quota reached")
 
             #  5. Rotate to face the goal 

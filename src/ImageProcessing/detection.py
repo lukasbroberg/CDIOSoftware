@@ -3,13 +3,18 @@ import numpy as np
 import cv2 as cv
 import struct
 import math
+from collections import deque
 from config.arucoConfig import aruco_config
 from ImageProcessing.image import mask_image_by_walls
-from ImageProcessing.mask import build_mask, clean_mask
+from ImageProcessing.mask import build_mask, clean_mask, clean_mask_boundary
 
 
 #Detects objects based on color: Orange ball, white ball, etc.  
 def detect_objects(image: np.ndarray, config) -> list[dict]:
+    
+    if image is None:
+        return
+    
     hsv = cv.cvtColor(image, cv.COLOR_BGR2HSV)
     results = []    
     
@@ -50,7 +55,9 @@ def detect_boundary_lines(image: np.ndarray) -> list[dict]:
     
     hsv = cv.cvtColor(image, cv.COLOR_BGR2HSV)
     red_mask = build_mask(hsv,COLOR_CONFIG["boundary"])
+    red_mask = clean_mask_boundary(red_mask,COLOR_CONFIG["boundary"])
     lines = cv.HoughLinesP(red_mask, rho=1, theta=np.pi/180, threshold=100, minLineLength=100, maxLineGap=20)
+    
     
     if lines is None:
         return None, None
@@ -86,6 +93,51 @@ def detect_boundary_lines(image: np.ndarray) -> list[dict]:
         [left_top[0], left_top[1], left_bottom[0], left_bottom[1], "left_wall"],
     ]    
     return lines, final_boundaries
+
+def expand_boundaries(boundaries, buffer=30):
+    expanded = []
+    for b in boundaries:
+        x1, y1, x2, y2, label = b
+        if label == "top_wall":
+            y1 += buffer; y2 += buffer
+        elif label == "bottom_wall":
+            y1 -= buffer; y2 -= buffer
+        elif label == "left_wall":
+            x1 += buffer; x2 += buffer
+        elif label == "right_wall":
+            x1 -= buffer; x2 -= buffer
+        expanded.append([x1, y1, x2, y2, label])
+    return expanded
+
+BOUNDARY_HISTORY = {
+    "top_wall":    deque(maxlen=20),
+    "bottom_wall": deque(maxlen=20),
+    "left_wall":   deque(maxlen=20),
+    "right_wall":  deque(maxlen=20),
+}
+
+def smooth_boundaries(new_boundaries):
+    if new_boundaries is None:
+        # Return last known good boundaries if available
+        smoothed = []
+        for label, history in BOUNDARY_HISTORY.items():
+            if history:
+                avg = np.mean(history, axis=0).astype(int)
+                smoothed.append([*avg, label])
+        return smoothed if smoothed else None
+
+    for b in new_boundaries:
+        x1, y1, x2, y2, label = b
+        if label in BOUNDARY_HISTORY:
+            BOUNDARY_HISTORY[label].append([x1, y1, x2, y2])
+
+    smoothed = []
+    for label, history in BOUNDARY_HISTORY.items():
+        if history:
+            avg = np.mean(history, axis=0).astype(int)
+            smoothed.append([int(avg[0]), int(avg[1]), int(avg[2]), int(avg[3]), label])
+
+    return smoothed
 
 #Detects goals from a prefixed width of the boundary lines of the level
 def detect_goals_from_lines(lines: list[dict]):

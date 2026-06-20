@@ -13,13 +13,13 @@ COLOR_CONFIG = {
     "white_ball": {
         # White = very low saturation, high brightness
         "kernel": cv.getStructuringElement(cv.MORPH_ELLIPSE, (5,5)),
-        "lower": np.array([0,   0, 213]),
-        "upper": np.array([179, 50, 255]),
+        "lower": np.array([0,   0, 200]),
+        "upper": np.array([179, 20, 255]),
         "draw_color": (240, 240, 200),  # BGR – light gray for display
     },
     "boundary": {
         # Red wraps around 0 in OpenCV HSV; handle both lobes
-        "kernel": cv.getStructuringElement(cv.MORPH_RECT, (2,2)),
+        "kernel": cv.getStructuringElement(cv.MORPH_RECT, (3,3)),
         "lower":  np.array([0,   100, 130]),
         "upper":  np.array([20,   255, 255]),
         "lower2": np.array([165, 50, 80]),
@@ -29,5 +29,5 @@ COLOR_CONFIG = {
 }
 
 #Doesnt recognize objects small than (in pxs):
-MIN_AREA = 300
-MAX_AREA = 900
+MIN_AREA = 250
+MAX_AREA = 1500

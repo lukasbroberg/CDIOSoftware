@@ -21,7 +21,7 @@ class Robot:
         for i, ball in enumerate(balls):
             d = getDistance(self.x,self.y,ball.x,ball.y)
             #Check if the ball is too close - might be the robot itself then.
-            if(d<ROBOTCONFIG['leastDistanceToBall']):
+            if(d<ROBOTCONFIG['leastDistanceToBall'] and len(balls)>1):
                 continue
             if nearest is None or nearestDist is None:
                 nearestDist=d

@@ -51,6 +51,12 @@ async def sendCommandReq(reader, writer, command):
 
 
 async def establishWriteReadConnection():
-    reader, writer = await asyncio.open_connection(ROBOT_IP,PORT)
+    try:
+        reader, writer = await asyncio.open_connection(ROBOT_IP,PORT)
+        if not reader or not writer:
+            return None, None
+        return reader, writer
+    except:
+        print("Unable to establish connection")
     
-    return reader, writer
+    return None, None
