@@ -16,11 +16,15 @@ def detection_to_point(det):
     }
 
 
-def build_scene_from_camera(detections, goals, robot_pos, robot_angle):
+def build_scene_from_camera(detections, goals, robot_pos, robot_angle, boundaries):
         
     robot = None
     orange_ball = []
     white_balls = []
+    _boundaries = []
+
+    goal_large = None
+    goal_small = None
 
     for det in detections:
         label = det["label"]
@@ -38,12 +42,17 @@ def build_scene_from_camera(detections, goals, robot_pos, robot_angle):
             "y": y1+(y2-y1)/2,
             "rotation": robot_angle
         }
-
-    goal_large = None
-    goal_small = None
     if goals is not None and goals[0] is not None and goals[1] is not None:
         goal_large = bbox_center(goals[0])
         goal_small = bbox_center(goals[1])
+        
+    if boundaries is not None:
+        _boundaries = [
+            boundaries[0][2], #right X (top right)
+            boundaries[2][0], #left X (bottom left)
+            boundaries[0][3], #top Y (top right)
+            boundaries[2][1], #bottom Y (bottom left)
+        ]
         
 
     return {
@@ -51,5 +60,6 @@ def build_scene_from_camera(detections, goals, robot_pos, robot_angle):
         "goal_large": goal_large,
         "orange_ball": orange_ball,
         "white_balls": white_balls,
-        "goal_small": goal_small
+        "goal_small": goal_small,
+        "boundaries": boundaries #right, left, top, bottom
     }

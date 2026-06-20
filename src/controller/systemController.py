@@ -5,7 +5,7 @@ from config.config_rules import COLOR_CONFIG, MIN_AREA
 from ImageProcessing.image import loadImage, mask_image_by_walls, color_correct_with_reference
 from ImageProcessing.neutralizeImage import *
 from ImageProcessing.detection import detect_objects, detect_boundary_lines, detect_goals_from_lines, detect_goals_from_aruco, detect_robot_from_aruco, detect_boundary_cross, expand_boundaries, smooth_boundaries
-from draw.draw import draw_detections,draw_lines,draw_goals,draw_robot,draw_cross_boundary, draw_target
+from draw.draw import draw_detections,draw_lines,draw_goals,draw_robot,draw_cross_boundary, draw_target, draw_tracked_objects
 from controller.mainController import *
 from config.arucoConfig import aruco_config 
 from controller.sceneAdapter import *
@@ -40,11 +40,12 @@ async def camera_task(cam, config, image_rec_active):
         #params = get_params("Camera")
         #config = update_config_from_trackbars(config, params)
 
-        detections, final_boundaries, goals, robot_pos, robot_angle, raw_pts, cross_boundary = run_detection(frame, config)
-        latest_scene = build_scene_from_camera(detections, goals, robot_pos, robot_angle)
+        detections, final_boundaries, goals, robot_pos, robot_angle, raw_pts, cross_boundary, buffed_boundaries = run_detection(frame, config)
+        latest_scene = build_scene_from_camera(detections, goals, robot_pos, robot_angle, buffed_boundaries)
         latest_frame_data = (frame, detections, final_boundaries, goals, robot_angle, raw_pts, cross_boundary)
 
         target = main_controller.robot.target if main_controller and main_controller.robot else None
+        tracked_objects = main_controller.balls if main_controller and main_controller.balls else None
 
         draw_output(
             frame, 
@@ -54,7 +55,8 @@ async def camera_task(cam, config, image_rec_active):
             raw_pts, 
             cross_boundary, 
             image_rec_active,
-            target=main_controller.robot.target if main_controller and main_controller.robot else None
+            target=main_controller.robot.target if main_controller and main_controller.robot else None,
+            tracked_objects = main_controller.balls if main_controller and main_controller.balls else None
         )
 
         if cv.waitKey(1) == ord('q'):
@@ -69,9 +71,7 @@ async def control_task(controller, reader, writer):
             continue
         
         
-        if reader is None or writer is None:
-            return
-        response = await run_controller(controller, latest_scene, reader, writer,False)
+        response = await run_controller(controller, latest_scene, reader, writer,True)
         
         if response is None:
             print("no response")
@@ -173,19 +173,6 @@ def capture_frame(cam):
     ret, frame = cam.read()
     return frame if ret else None
 
-def run_detection(frame, config):
-    #hvid_reference_boks = (10,10, 50, 50)
-    #frame = color_correct_with_reference(frame,hvid_reference_boks)
-    lines, final_boundaries = detect_boundary_lines(frame)
-    final_boundaries = smooth_boundaries(final_boundaries)
-    buffered_boundaries = expand_boundaries(final_boundaries, 30)
-    image_cropped = mask_image_by_walls(frame, buffered_boundaries)
-    detections = detect_objects(image_cropped, config)
-    goals = detect_goals_from_aruco(frame)
-    robot_pos, robot_angle, raw_pts = detect_robot_from_aruco(image_cropped)
-    cross_boundary = detect_boundary_cross(image_cropped)
-    return detections, final_boundaries, goals, robot_pos, robot_angle, raw_pts, cross_boundary
-
 def update_config_from_trackbars(config, params):
     wh = params["hsv"]["white"]
     og = params["hsv"]["orange"]
@@ -195,7 +182,7 @@ def update_config_from_trackbars(config, params):
     config["orange_ball"]["upper"] = np.array([og[1], og[3], og[5]])
     return config
 
-def draw_output(frame, detections, final_boundaries, goals, robot_angle, raw_pts, cross_boundary, image_rec_active, target: Ball = None):
+def draw_output(frame, detections, final_boundaries, goals, robot_angle, raw_pts, cross_boundary, image_rec_active, target: Ball = None, tracked_objects: list[TrackedObject] = None):
     #hvid_reference_boks = (1000,1000, 5, 5)
     #frame = color_correct_with_reference(frame,hvid_reference_boks)
     
@@ -207,6 +194,7 @@ def draw_output(frame, detections, final_boundaries, goals, robot_angle, raw_pts
         output = draw_goals(frame, goals)
         output = draw_robot(frame, robot_pos_formatted, robot_angle)
         output = draw_cross_boundary(frame, cross_boundary)
+        output = draw_tracked_objects(frame, tracked_objects)
         
         if(target is not None):
             output = draw_target(output,target)
@@ -226,10 +214,26 @@ def handle_keypresses(image_rec_active, runLoop):
         runLoop = not runLoop
         print("Run loop:", runLoop)
     return image_rec_active, runLoop, False
+
+def run_detection(frame, config):
+    #hvid_reference_boks = (10,10, 50, 50)
+    #frame = color_correct_with_reference(frame,hvid_reference_boks)
+    lines, final_boundaries = detect_boundary_lines(frame)
+    final_boundaries = smooth_boundaries(final_boundaries)
+    buffered_boundaries = expand_boundaries(final_boundaries, 30)
+    image_cropped = mask_image_by_walls(frame, buffered_boundaries)
+    detections = detect_objects(image_cropped, config)
+    goals = detect_goals_from_aruco(frame)
+    robot_pos, robot_angle, raw_pts = detect_robot_from_aruco(image_cropped)
+    cross_boundary = detect_boundary_cross(image_cropped)
+    return detections, final_boundaries, goals, robot_pos, robot_angle, raw_pts, cross_boundary, buffered_boundaries
+
         
 async def run_controller(controller: MainController, scene, reader, writer, sendCommands: bool = True):
     controller.initializeObjects(scene)
     controller.updateRobotState()
+    if reader is None or writer is None:
+        return "DONE::NoCommand"
     if sendCommands is True and len(controller.commandsQueue) > 0:
         response: str = await send_command(reader, writer, controller.passCommandToRobot())
         return response

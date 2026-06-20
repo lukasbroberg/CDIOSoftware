@@ -99,10 +99,10 @@ def release_cycle():
     motor_a.on(SpeedPercent(-20))
     #sleep(0.5)
     #drive_forward(10)
-    sleep(0.5)
+    sleep(6.0)
     #stop_drive()
     #drive_backward(7)
-    sleep(2.5)
+    #sleep(2.5)
     stop_drive()
     motor_a.stop(stop_action="brake")
 

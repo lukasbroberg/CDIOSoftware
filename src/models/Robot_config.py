@@ -10,6 +10,7 @@ ROBOTCONFIG = {
     'fullTurnTime': 6.48,
     'goalDropOffOffset': 300,
     'goalAlignZoneOffset': 100,
-    'targetOffsetX': -100, 
-    'targetOffsetY': -100
+    'targetOffsetX': -150, 
+    'targetOffsetY': -150,
+    'maxDistToBoundary': 100,
 }

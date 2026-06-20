@@ -1,6 +1,7 @@
 import numpy as np
 import cv2 as cv
 from models.Ball import *
+from models.TrackedObjects import *
 
 #Draws upon the a copy of the original image the actual detected objects
 def draw_detections(output: np.ndarray, detectections: list[dict]) -> np.ndarray:
@@ -93,4 +94,15 @@ def draw_target(output: np.ndarray, targetBall: Ball):
     cv.putText(output,str("target"),(x+30,y),1,2,(color),2,None,None)
     return output
 
+
+def draw_tracked_objects(output: np.ndarray, objects: list[TrackedObject]):
+    if output is None:
+        return
     
+    if objects is None:
+        return output
+    
+    for object in objects:
+        cv.putText(output, str(object.id), (object.x, object.y),1,2,(0,0,0),2,None,None)
+    
+    return output

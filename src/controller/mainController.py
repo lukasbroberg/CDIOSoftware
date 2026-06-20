@@ -5,6 +5,7 @@ from models.Goal import Goal
 from models.Robot_config import ROBOTCONFIG
 from utils.getDistance import getDistance
 from utils.getAngle import getAngle
+from models.TrackedObjects import *
 
 # ── How many balls to collect before heading to the goal ─────────────────────
 BALLS_PER_TRIP = 3
@@ -47,6 +48,8 @@ class MainController:
         self.largeGoal:     Goal  | None = None
         self.smallGoal:     Goal  | None = None
         self.currentState:  str   | None = None
+        self.boundaries:    list | None = None
+        self.tracker = ObjectTracker(max_distance=150)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Scene initialisation (called every frame by main.py)
@@ -74,11 +77,39 @@ class MainController:
             self.smallGoal = Goal(scene["goal_small"]["x"], scene["goal_small"]["y"])
 
 
-        self.balls = []
+        raw_balls = []
         for b in (scene.get("orange_ball") or []):
-            self.balls.append(Ball(b["x"], b["y"], True))
+            raw_balls.append(Ball(b["x"], b["y"], True))
         for b in (scene.get("white_balls") or []):
-            self.balls.append(Ball(b["x"], b["y"], False))
+            raw_balls.append(Ball(b["x"], b["y"], False))
+        self.balls = self.tracker.update(raw_balls)
+        
+        #Update robot's target to follow target position
+        if self.robot and self.robot.target is not None:
+            target_id = self.robot.target.id
+            matched = self.tracker.tracked.get(target_id)
+            if matched:
+                self.robot.target = matched  # smoothly updated position
+            else:
+                self.robot.target = None     # lost — trigger FindBall
+            
+        if scene.get("boundaries") is not None:
+            _boundaries = scene.get("boundaries")
+            print("raw boundaries:", _boundaries)
+            
+            _boundaries = scene.get("boundaries")
+            top_wall    = _boundaries[0]
+            bottom_wall = _boundaries[1]
+            left_wall   = _boundaries[2]
+            right_wall  = _boundaries[3]
+
+            self.boundaries = {
+                "right":  int(right_wall[0]),   
+                "left":   int(left_wall[0]),    
+                "top":    int(top_wall[1]),     
+                "bottom": int(bottom_wall[1]), 
+            }
+            print(self.boundaries)
             
     #Gets the robots angle to target
     def _angle_to_target(self) -> float | None:
@@ -141,9 +172,29 @@ class MainController:
         self.currentState = state
 
 
+    # checks whether or not the robot is too close to the boundary
+    def is_danger_zone(self, item):        
+        if self.boundaries is None:
+            return False
+        
+        if item is None:
+            return False
+        
+        print(f"[DANGER CHECK] pos=({item.x:.0f},{item.y:.0f}) boundaries={self.boundaries} margin={ROBOTCONFIG['maxDistToBoundary']}")
+        
+        if (item.y-ROBOTCONFIG["maxDistToBoundary"]>self.boundaries["top"] and
+            item.y+ROBOTCONFIG["maxDistToBoundary"]<self.boundaries["bottom"] and
+            item.x+ROBOTCONFIG["maxDistToBoundary"]<self.boundaries["right"] and
+            item.x-ROBOTCONFIG["maxDistToBoundary"]>self.boundaries["left"]):
+            return False
+        
+        return True
+        
+        
+        
+
     # State machine
     # The state is updated after each succesful command.
-
     def updateRobotState(self):
         if self.robot is None:
             print("[STATE] No robot detected – skipping")
@@ -217,6 +268,12 @@ class MainController:
                 if self.robot.target is None:
                     self._go_to_state("FindBall", "lost target")
                     return
+                
+                if self.is_danger_zone(self.robot):
+                    print("!!!danger zone!!!")
+                    self.commandsQueue.append("BACKWARD_TIMED::1.0")
+                    self.currentState = "AlignWithBall"
+                    return
 
                 d = self._distance_to_target()
                 print(f"[STATE] Distance to ball: {d:.0f} px")
@@ -262,7 +319,7 @@ class MainController:
                 # Two commands queued; the queue-guard above ensures state won't
                 # advance until both have been popped and executed.
                 #self.commandsQueue.append("COLLECT")
-                self._enqueue_forward(300.0)
+                self._enqueue_forward(20.0)
                 self._enqueue_backward(ROBOTCONFIG["backupDistance"])
 
                 self.robot.pickedUpBalls += 1
@@ -334,6 +391,7 @@ class MainController:
                 self.robot.target = None
                 print("[STATE] Released all balls")
                 self._go_to_state("FindBall", "delivery done")
+                self.commandsQueue.append("COLLECT")
 
             # Terminal 
             case "Stop":
@@ -343,9 +401,7 @@ class MainController:
                 print(f"[STATE] Unknown state '{self.currentState}'")
                 self._go_to_state("Stop")
 
-    # ─────────────────────────────────────────────────────────────────────────
     # Command dispatch (called by main.py)
-    # ─────────────────────────────────────────────────────────────────────────
 
     def passCommandToRobot(self) -> str | None:
         if not self.commandsQueue:
