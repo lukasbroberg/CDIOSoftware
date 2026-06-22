@@ -19,7 +19,7 @@ class Robot:
         nearestDist = None
 
         for i, ball in enumerate(balls):
-            d = getDistance(self.x,self.y,ball.x,ball.y)
+            d = getDistance(self.x,self.y,ball.x,ball.y,26,0)
             #Check if the ball is too close - might be the robot itself then.
             if(d<ROBOTCONFIG['leastDistanceToBall'] and len(balls)>1):
                 continue
@@ -50,9 +50,11 @@ class Robot:
         )
         
     def setTarget(self, target):
-        self.target = target
-        target.x = target.x + ROBOTCONFIG['targetOffsetX']
-        target.y = target.y + ROBOTCONFIG['targetOffsetY']
+        import copy
+        _target = copy.copy(target)
+        self.target = _target
+        self.target.x = _target.x + ROBOTCONFIG['targetOffsetX']
+        self.target.y = _target.y + ROBOTCONFIG['targetOffsetY']
     
     def getDeltaAngle(self, targetAngle_deg):
         if targetAngle_deg is None:
@@ -70,10 +72,7 @@ class Robot:
     def isFacingTarget(self, tolerance = ROBOTCONFIG["angleTolerance"]):
         if self.target is None:
             return False
-        isFacing = abs(self.getDeltaAngle(getAngle(self.x,self.y,self.target.x,self.target.y))) <= tolerance;
+        isFacing = abs(self.getDeltaAngle(getAngle(self.x,self.y,self.target.x,self.target.y,26,0))) <= tolerance;
         return isFacing
-
-    def setTarget(self, target):
-        self.target = target
 
     

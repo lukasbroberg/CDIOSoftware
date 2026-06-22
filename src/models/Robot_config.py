@@ -1,16 +1,16 @@
 ROBOTCONFIG = {
-    'angleTolerance': 5,
-    'closeRangeTolerance': 15,
-    'distanceTolerance': 100,    # px — "close enough to goal" for RELEASE
-    'collectOffset': 50,       # px — stop MoveToBall here, then COLLECT + ram forward
-    'leastDistanceToBall': 250,
+    'angleTolerance': 10,        # degrees - An acceptabel range of degrees of error for the robot, to move towards the target
+    'closeRangeTolerance': 15,  # degrees - An acceptabel range of degrees of error for the robot close target
+    'distanceTolerance': 100,   # px — "close enough to goal" for RELEASE
+    'collectOffset': 60,        # px — stop MoveToBall here, then COLLECT + ram forward
+    'leastDistanceToBall': 20, # px - from which targets least amount of distance
     'backupDistance': 150,      # px — reverse this far after collecting
-    'dropOffOffset': 50,
-    'bounadryOffset': 50,
+    'dropOffOffset': 170,        
+    'bounadryOffset': 50,       # px - boundary's buffer 
     'fullTurnTime': 6.48,
-    'goalDropOffOffset': 300,
+    'goalDropOffOffset': 450,
     'goalAlignZoneOffset': 100,
-    'targetOffsetX': -150, 
-    'targetOffsetY': -150,
+    'targetOffsetX': -20, 
+    'targetOffsetY': -20,
     'maxDistToBoundary': 100,
 }

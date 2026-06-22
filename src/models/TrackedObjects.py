@@ -42,5 +42,4 @@ class ObjectTracker:
                 self.next_id += 1
 
         self.tracked = updated
-        print(self.tracked)
         return list(self.tracked.values())

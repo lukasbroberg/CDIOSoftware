@@ -85,18 +85,15 @@ class MainController:
         self.balls = self.tracker.update(raw_balls)
         
         #Update robot's target to follow target position
-        if self.robot and self.robot.target is not None:
+        if self.robot and self.robot.target is Ball:
             target_id = self.robot.target.id
             matched = self.tracker.tracked.get(target_id)
             if matched:
-                self.robot.target = matched  # smoothly updated position
-            else:
-                self.robot.target = None     # lost — trigger FindBall
+                print(f"[DEBUG] before update target=({self.robot.target.x:.0f},{self.robot.target.y:.0f}) matched=({matched.x:.0f},{matched.y:.0f})")
+                self.robot.setTarget(matched)
+                print(f"[DEBUG] after update target=({self.robot.target.x:.0f},{self.robot.target.y:.0f})")
             
         if scene.get("boundaries") is not None:
-            _boundaries = scene.get("boundaries")
-            print("raw boundaries:", _boundaries)
-            
             _boundaries = scene.get("boundaries")
             top_wall    = _boundaries[0]
             bottom_wall = _boundaries[1]
@@ -109,21 +106,20 @@ class MainController:
                 "top":    int(top_wall[1]),     
                 "bottom": int(bottom_wall[1]), 
             }
-            print(self.boundaries)
             
     #Gets the robots angle to target
     def _angle_to_target(self) -> float | None:
         t = self.robot.target
         if t is None:
             return None
-        return getAngle(self.robot.x, self.robot.y, t.x, t.y)
+        return getAngle(self.robot.x, self.robot.y, t.x, t.y,26,0)
 
     #Gets the robots distance to target
     def _distance_to_target(self) -> float | None:
         t = self.robot.target
         if t is None:
             return None
-        return getDistance(self.robot.x, self.robot.y, t.x, t.y)
+        return getDistance(self.robot.x, self.robot.y, t.x, t.y,26, 0)
 
     #Returns the nearest Ball - TODO add compatibility to find orange balls
     def _find_best_ball(self) -> Ball | None:
@@ -141,6 +137,10 @@ class MainController:
         for ball in self.balls:
             if not ball.isOrange:
                 white_balls.append(ball)
+        
+        if white_balls is None or len(white_balls)<=0:
+            return self._find_best_ball()
+        
         return self.robot.findNearestBall(white_balls)
     
     def _find_best_orange_ball(self) -> Ball | None:
@@ -269,11 +269,11 @@ class MainController:
                     self._go_to_state("FindBall", "lost target")
                     return
                 
-                if self.is_danger_zone(self.robot):
-                    print("!!!danger zone!!!")
-                    self.commandsQueue.append("BACKWARD_TIMED::1.0")
-                    self.currentState = "AlignWithBall"
-                    return
+                #if self.is_danger_zone(self.robot):
+                #    print("!!!danger zone!!!")
+                #    self.commandsQueue.append("BACKWARD_TIMED::1.0")
+                #    self.currentState = "AlignWithBall"
+                #    return
 
                 d = self._distance_to_target()
                 print(f"[STATE] Distance to ball: {d:.0f} px")
@@ -319,10 +319,22 @@ class MainController:
                 # Two commands queued; the queue-guard above ensures state won't
                 # advance until both have been popped and executed.
                 #self.commandsQueue.append("COLLECT")
+                self.robot.pickedUpBalls += 1
                 self._enqueue_forward(20.0)
                 self._enqueue_backward(ROBOTCONFIG["backupDistance"])
 
-                self.robot.pickedUpBalls += 1
+                #MÅSKE TIL AT HOLDE TRACK PÅ OM TARGET ER SAMLET OP ELLER EJ
+                    #target_id = self.robot.target.id if self.robot.target else None
+
+                    # Check if target disappeared from tracker (ball was picked up)
+                    #if target_id is not None and target_id not in self.tracker.tracked:
+                    #    print(f"[STATE] Ball #{target_id} no longer visible — confirmed pickup")
+                    #    self.robot.pickedUpBalls += 1
+                    #else:
+                        # Still visible — may have missed it, count it anyway and move on
+                    #    print(f"[STATE] Ball #{target_id} still visible — assuming collected")
+                    #    self.robot.pickedUpBalls += 1
+
                 print(f"[STATE] Collecting ball #{self.robot.pickedUpBalls}  "
                       f"(backup {ROBOTCONFIG['backupDistance']}px)")
 
@@ -333,8 +345,59 @@ class MainController:
                     if self.smallGoal is None:
                         print("[STATE] Goal not yet detected – waiting")
                         return
+                    #self.robot.setTarget(self.smallGoal)
+                    dropOffPoint = Goal(
+                        self.smallGoal.x+ROBOTCONFIG["goalDropOffOffset"],
+                        self.smallGoal.y
+                    )
+                    self.robot.setTarget(dropOffPoint)
+                    self._go_to_state("AlignWithDropOffPoint", "quota reached")
+                    
+            # Align with dropOffPoint
+            case "AlignWithDropOffPoint":
+                if self.robot.target is None:
+                    self._go_to_state("FindBall", "lost goal target")
+                    return
+                
+                
+                if self.robot.isFacingTarget():
+                    self._go_to_state("MoveTowardsDropOffPoint", "aligned")
+                    return
+                
+                d = self._distance_to_target()
+                if d <= 50:
                     self.robot.setTarget(self.smallGoal)
-                    self._go_to_state("AlignWithGoal", "quota reached")
+                    self._go_to_state("AlignWithGoal", "in range")
+                    return
+                
+                delta = self.robot.getDeltaAngle(self._angle_to_target())
+                print(f"[STATE] Turning {delta:+.1f}°")
+                self._enqueue_turn(delta)
+                
+            case "MoveTowardsDropOffPoint":
+                if self.robot.target is None:
+                    self._go_to_state("FindBall", "lost goal target")
+                    return
+
+                if not self.robot.isFacingTarget():
+                    self._go_to_state("AlignWithDropOffPoint", "drifted")
+                    return
+
+                d = self._distance_to_target()
+                print(f"[STATE] Distance to goal: {d:.0f} px")
+
+                if d <= 50:
+                    self.robot.setTarget(self.smallGoal)
+                    self._go_to_state("AlignWithGoal", "in range")
+                    return
+
+                drive_px = min(d, 150)
+                #Safe quit to release ball, removes unlimited cycle of moving forward
+                if(drive_px<20):
+                    self._go_to_state("AlignWithGoal", "in range")
+                
+                self._enqueue_forward(drive_px)
+                
 
             #  5. Rotate to face the goal 
             case "AlignWithGoal":
@@ -343,7 +406,7 @@ class MainController:
                     return
 
                 if self.robot.isFacingTarget():
-                    self._go_to_state("MoveToGoal", "aligned")
+                    self._go_to_state("DropBall", "aligned")
                     return
 
                 delta = self.robot.getDeltaAngle(self._angle_to_target())
@@ -380,10 +443,10 @@ class MainController:
                     self._go_to_state("AlignWithGoal", "not facing")
                     return
 
-                d = self._distance_to_target()
-                if d is not None and d > ROBOTCONFIG["goalDropOffOffset"]:
-                    self._go_to_state("MoveToGoal", "too far")
-                    return
+                #d = self._distance_to_target()
+                #if d is not None and d > ROBOTCONFIG["goalDropOffOffset"]:
+                #    self._go_to_state("MoveToGoal", "too far")
+                #    return
 
                 self.commandsQueue.append("RELEASE")
                 self.robot.deliveredBalls += self.robot.pickedUpBalls
@@ -395,6 +458,10 @@ class MainController:
 
             # Terminal 
             case "Stop":
+                if self.robot.pickedUpBalls>0 or self.robot.deliveredBalls<=0:
+                    self.currentState="AlignWithGoal"
+                    print("Robot stopped, no balls detected. Moving robot away")
+                
                 print("[STATE] Robot stopped – nothing left to do")
 
             case _:

@@ -1,6 +1,7 @@
 import numpy as np
 import cv2 as cv
 from models.Ball import *
+from models.Robot import *
 from models.TrackedObjects import *
 
 #Draws upon the a copy of the original image the actual detected objects
@@ -78,7 +79,7 @@ def draw_cross_boundary(output: np.ndarray, cross_boundary: list = None):
             
     return output
 
-def draw_target(output: np.ndarray, targetBall: Ball):
+def draw_target(output: np.ndarray, targetBall: Ball, robot: Robot = None):
         
     if output is None:
         return
@@ -92,6 +93,9 @@ def draw_target(output: np.ndarray, targetBall: Ball):
 
     cv.rectangle(output, (x,y), (x+30,y+30), color, 2)
     cv.putText(output,str("target"),(x+30,y),1,2,(color),2,None,None)
+    if robot is None:
+        return output
+    cv.line(output, (robot.x, robot.y),(targetBall.x,targetBall.y), (0,0,255), 3)
     return output
 
 

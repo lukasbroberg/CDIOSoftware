@@ -29,5 +29,5 @@ COLOR_CONFIG = {
 }
 
 #Doesnt recognize objects small than (in pxs):
-MIN_AREA = 250
+MIN_AREA = 300
 MAX_AREA = 1500

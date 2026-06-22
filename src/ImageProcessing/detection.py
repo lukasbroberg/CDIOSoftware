@@ -95,6 +95,9 @@ def detect_boundary_lines(image: np.ndarray) -> list[dict]:
     return lines, final_boundaries
 
 def expand_boundaries(boundaries, buffer=30):
+    if boundaries is None:
+        return None
+    
     expanded = []
     for b in boundaries:
         x1, y1, x2, y2, label = b
