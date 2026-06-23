@@ -3,6 +3,7 @@ from models.Ball import *
 from utils.getAngle import *
 from models.Robot_config import *
 from models.Ball import *
+from models.Goal import *
 
 class Robot:
     #Constructor for Robot

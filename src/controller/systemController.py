@@ -5,7 +5,7 @@ from config.config_rules import COLOR_CONFIG, MIN_AREA
 from ImageProcessing.image import loadImage, mask_image_by_walls, color_correct_with_reference
 from ImageProcessing.neutralizeImage import *
 from ImageProcessing.detection import detect_objects, detect_boundary_lines, detect_goals_from_lines, detect_goals_from_aruco, detect_robot_from_aruco, detect_boundary_cross, expand_boundaries, smooth_boundaries
-from draw.draw import draw_detections,draw_lines,draw_goals,draw_robot,draw_cross_boundary, draw_target, draw_tracked_objects
+from draw.draw import draw_detections,draw_lines,draw_goals,draw_robot,draw_cross_boundary, draw_target, draw_tracked_objects, draw_path
 from controller.mainController import *
 from config.arucoConfig import aruco_config 
 from controller.sceneAdapter import *
@@ -41,7 +41,7 @@ async def camera_task(cam, config, image_rec_active):
         #config = update_config_from_trackbars(config, params)
 
         detections, final_boundaries, goals, robot_pos, robot_angle, raw_pts, cross_boundary, buffed_boundaries = run_detection(frame, config)
-        latest_scene = build_scene_from_camera(detections, goals, robot_pos, robot_angle, buffed_boundaries)
+        latest_scene = build_scene_from_camera(detections, goals, robot_pos, robot_angle, buffed_boundaries, cross_boundary)
         latest_frame_data = (frame, detections, final_boundaries, goals, robot_angle, raw_pts, cross_boundary)
 
         target = main_controller.robot.target if main_controller and main_controller.robot else None
@@ -56,7 +56,9 @@ async def camera_task(cam, config, image_rec_active):
             cross_boundary, 
             image_rec_active,
             target=main_controller.robot.target if main_controller and main_controller.robot else None,
-            tracked_objects = main_controller.balls if main_controller and main_controller.balls else None
+            tracked_objects = main_controller.balls if main_controller and main_controller.balls else None,
+            path=main_controller.currentPath if main_controller and main_controller.currentPath else None,
+            robot=main_controller.robot
         )
 
         if cv.waitKey(1) == ord('q'):
@@ -182,7 +184,7 @@ def update_config_from_trackbars(config, params):
     config["orange_ball"]["upper"] = np.array([og[1], og[3], og[5]])
     return config
 
-def draw_output(frame, detections, final_boundaries, goals, robot_angle, raw_pts, cross_boundary, image_rec_active, target: Ball = None, tracked_objects: list[TrackedObject] = None):
+def draw_output(frame, detections, final_boundaries, goals, robot_angle, raw_pts, cross_boundary, image_rec_active, target: Ball = None, tracked_objects: list[TrackedObject] = None, path: list = None, robot = None):
     #hvid_reference_boks = (1000,1000, 5, 5)
     #frame = color_correct_with_reference(frame,hvid_reference_boks)
     
@@ -198,6 +200,10 @@ def draw_output(frame, detections, final_boundaries, goals, robot_angle, raw_pts
         
         if(target is not None):
             output = draw_target(output,target)
+            
+        if(path is not None and len(path)>0 and robot is not None):
+            output = draw_path(output, path, robot)
+        
         
         cv.imshow('Camera', output)
     else:

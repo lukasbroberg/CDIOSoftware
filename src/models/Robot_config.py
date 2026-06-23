@@ -9,7 +9,7 @@ ROBOTCONFIG = {
     'bounadryOffset': 50,       # px - boundary's buffer 
     'fullTurnTime': 6.48,
     'goalDropOffOffset': 30.0,
-    'goalAlignZoneOffset': 100,
+    'goalAlignZoneOffset': 100.0,
     'targetOffsetX': -20, 
     'targetOffsetY': -20,
     'maxDistToBoundary': 25.0,
