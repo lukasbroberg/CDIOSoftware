@@ -6,6 +6,7 @@ from models.Robot_config import ROBOTCONFIG
 from utils.getDistance import getDistance
 from utils.getAngle import getAngle
 from models.TrackedObjects import *
+from utils.perspectiveCorrection import PIXELS_PER_CM_FLOOR
 
 # ── How many balls to collect before heading to the goal ─────────────────────
 BALLS_PER_TRIP = 3
@@ -16,8 +17,9 @@ BALLS_PER_TRIP = 3
 SECONDS_PER_100_PX = 2.155
 
 
-def _drive_time(pixels: float) -> float:
-    return round(abs(pixels) / 100.0 * SECONDS_PER_100_PX, 3)
+def _drive_time(cm: float) -> float:
+    equivalent_pixels = abs(cm) * PIXELS_PER_CM_FLOOR
+    return round(equivalent_pixels / 100.0 * SECONDS_PER_100_PX, 3)
 
 
 def _turn_time(degrees: float) -> float:
@@ -107,19 +109,35 @@ class MainController:
                 "bottom": int(bottom_wall[1]), 
             }
             
-    #Gets the robots angle to target
+    # Gets the robot's true angle to target on the floor
     def _angle_to_target(self) -> float | None:
         t = self.robot.target
         if t is None:
             return None
-        return getAngle(self.robot.x, self.robot.y, t.x, t.y,26,0)
+        
+        # 1. Map the robot's top pixel point down to its true ground-floor cm coordinate
+        rx_cm, ry_cm = pixel_to_world(self.robot.x, self.robot.y, object_height_cm=26.0)
+        
+        # 2. Map the target's pixel point down to its ground-floor cm coordinate
+        tx_cm, ty_cm = pixel_to_world(t.x, t.y, object_height_cm=0.0)
+        
+        # 3. Compute the pure ground angle using standard trigonometry 
+        return math.degrees(math.atan2(ty_cm - ry_cm, tx_cm - rx_cm))
 
-    #Gets the robots distance to target
+    # Gets the robot's true distance to target on the floor
     def _distance_to_target(self) -> float | None:
         t = self.robot.target
         if t is None:
             return None
-        return getDistance(self.robot.x, self.robot.y, t.x, t.y,26, 0)
+            
+        # 1. Map robot top to real-world floor centimeters
+        rx_cm, ry_cm = pixel_to_world(self.robot.x, self.robot.y, object_height_cm=26.0)
+        
+        # 2. Map target to real-world floor centimeters
+        tx_cm, ty_cm = pixel_to_world(t.x, t.y, object_height_cm=0.0)
+        
+        # 3. Return the real ground distance
+        return math.hypot(tx_cm - rx_cm, ty_cm - ry_cm)
 
     #Returns the nearest Ball - TODO add compatibility to find orange balls
     def _find_best_ball(self) -> Ball | None:
@@ -160,12 +178,22 @@ class MainController:
         direction = "LEFT_TIMED" if delta < 0 else "RIGHT_TIMED"
         self.commandsQueue.append(f"{direction}::{t}")
 
-    def _enqueue_forward(self, pixels: float):
-        self.commandsQueue.append(f"FORWARD_TIMED::{_drive_time(pixels)}")
+    def _enqueue_forward(self, cm: float):
+        self.commandsQueue.append(f"FORWARD_TIMED::{_drive_time(cm)}")
 
-    def _enqueue_backward(self, pixels: float):
-        self.commandsQueue.append(f"BACKWARD_TIMED::{_drive_time(pixels)}")
-
+    def _enqueue_backward(self, cm: float):
+        self.commandsQueue.append(f"BACKWARD_TIMED::{_drive_time(cm)}")
+        
+    def _enqueue_collect(self):
+        self.commandsQueue.append(f"COLLECT")
+        
+    def _enqueue_opendoors(self):
+        self.commandsQueue.append(f"OPENDOOR")
+        
+    def _enqueue_closedoors(self):
+        self.commandsQueue.append(f"CLOSEDOOR")
+    
+        
     def _go_to_state(self, state: str, reason: str = ""):
         tag = f" ({reason})" if reason else ""
         print(f"[STATE] {self.currentState} → {state}{tag}")
@@ -275,8 +303,9 @@ class MainController:
                 #    self.currentState = "AlignWithBall"
                 #    return
 
+                
                 d = self._distance_to_target()
-                print(f"[STATE] Distance to ball: {d:.0f} px")
+                print(f"[STATE] Distance to ball: {d:.0f} cm")
                 
                 if d <= ROBOTCONFIG["collectOffset"]:
                     self._go_to_state("PickupBall", "in collect range")
@@ -298,19 +327,19 @@ class MainController:
                 # re-checked frequently, but never smaller than MIN_DRIVE_PX.
                 # Sub-threshold gaps aren't worth a command; just enter
                 # PickupBall and let the ram-forward cover the last few px.
-                MIN_DRIVE_PX = 30
-                drive_px = min(d - ROBOTCONFIG["collectOffset"], 150)
-                if drive_px < MIN_DRIVE_PX:
+                MIN_DRIVE_CM = 2.0
+                drive_cm = min(d - ROBOTCONFIG["collectOffset"], 15.0)
+                if drive_cm < MIN_DRIVE_CM:
                     self._go_to_state("PickupBall", "close enough")
                     return
-                self._enqueue_forward(float(drive_px))
+                self._enqueue_forward(float(drive_cm))
 
             # 4. Collect ball, then back up
             case "PickupBall":
                 d = self._distance_to_target()
                 # Accept anything within collectOffset + MIN_DRIVE_PX — that's
                 # the same boundary MoveToBall uses to enter this state.
-                MIN_DRIVE_PX = 30
+                MIN_DRIVE_PX = 2.0
                 if d is not None and d > ROBOTCONFIG["collectOffset"] + MIN_DRIVE_PX:
                     self._go_to_state("MoveToBall", "too far")
                     return
@@ -320,7 +349,11 @@ class MainController:
                 # advance until both have been popped and executed.
                 #self.commandsQueue.append("COLLECT")
                 self.robot.pickedUpBalls += 1
-                self._enqueue_forward(20.0)
+                #self._enqueue_collect()
+                self._enqueue_closedoors()
+                self._enqueue_forward(10.0)
+                self._enqueue_opendoors()
+                
                 self._enqueue_backward(ROBOTCONFIG["backupDistance"])
 
                 #MÅSKE TIL AT HOLDE TRACK PÅ OM TARGET ER SAMLET OP ELLER EJ
@@ -365,7 +398,7 @@ class MainController:
                     return
                 
                 d = self._distance_to_target()
-                if d <= 50:
+                if d <= 5.0:
                     self.robot.setTarget(self.smallGoal)
                     self._go_to_state("AlignWithGoal", "in range")
                     return
@@ -386,12 +419,12 @@ class MainController:
                 d = self._distance_to_target()
                 print(f"[STATE] Distance to goal: {d:.0f} px")
 
-                if d <= 50:
+                if d <= 5.0:
                     self.robot.setTarget(self.smallGoal)
                     self._go_to_state("AlignWithGoal", "in range")
                     return
 
-                drive_px = min(d, 150)
+                drive_px = min(d, 15.0)
                 #Safe quit to release ball, removes unlimited cycle of moving forward
                 if(drive_px<20):
                     self._go_to_state("AlignWithGoal", "in range")

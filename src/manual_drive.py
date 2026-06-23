@@ -22,6 +22,8 @@ KEY_MAP = {
     " ": "STOP",
     "q": "EXIT",
     "p": "ON_CONNECTION",
+    "o": "OPENDOOR",
+    "l": "CLOSEDOOR",
 }
 
 VALUE_MAP = {

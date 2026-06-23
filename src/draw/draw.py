@@ -91,6 +91,9 @@ def draw_target(output: np.ndarray, targetBall: Ball, robot: Robot = None):
     y = targetBall.y
     color = (255,0,0)
 
+    if x is None or y is None:
+        return output
+
     cv.rectangle(output, (x,y), (x+30,y+30), color, 2)
     cv.putText(output,str("target"),(x+30,y),1,2,(color),2,None,None)
     if robot is None:

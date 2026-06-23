@@ -25,7 +25,7 @@ class ObjectTracker:
             for tid, obj in self.tracked.items():
                 if obj.isOrange != det.isOrange:
                     continue  # don't match across types
-                dist = getDistance(det.x, det.y, obj.x, obj.y)
+                dist = getDistance(det.x, det.y, obj.x, obj.y,0,0)
                 if dist < best_dist and dist < self.max_distance:
                     best_dist = dist
                     best_id = tid

@@ -8,7 +8,7 @@ HEIGHT_ROBOT = 26.0
 
 # Calibrate this precisely by placing a ruler directly in the center of the frame
 # on the floor plane (Z = 0)
-PIXELS_PER_CM_FLOOR = 7.566  
+PIXELS_PER_CM_FLOOR = 6.7915  
 
 # Initialize camera capture globally
 cam = cv.VideoCapture(1)

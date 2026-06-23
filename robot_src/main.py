@@ -12,8 +12,8 @@ HOST = "0.0.0.0"
 PORT = 9999
 
 # Motorer
-motor_a = MediumMotor(OUTPUT_A)   # opsamler
-motor_b = MediumMotor(OUTPUT_B)  # arm
+motor_a = MediumMotor(OUTPUT_A)     # opsamler
+motor_b = MediumMotor(OUTPUT_B)     # Vægge
 left_motor = LargeMotor(OUTPUT_C)
 right_motor = LargeMotor(OUTPUT_D)
 
@@ -58,16 +58,22 @@ def timed_drive(action, duration=1.0):
     action()
     sleep(duration)
     stop_drive()
+    
+def closedDoor(degrees):
+    motor_b.on_for_degrees(SpeedPercent(25),-degrees)
+    
+def openDoor(degrees):
+    motor_b.on_for_degrees(SpeedPercent(25),degrees)
 
 
 def nudge_forward():
-    drive_forward()
+    drive_forward(25)
     sleep(NUDGE_TIME)
     stop_drive()
 
 
 def nudge_backward():
-    drive_backward()
+    drive_backward(25)
     sleep(NUDGE_TIME)
     stop_drive()
 
@@ -84,8 +90,14 @@ def nudge_right():
     stop_drive()
 
 
+#Starts regular pick-up motors, and closes the walls.
 def collect_cycle():
-    motor_a.on(SpeedPercent(25))
+    motor_a.on(SpeedPercent(50))
+    closedDoor(360)
+    sleep(1.0)
+    nudge_forward()
+    sleep(1.0)
+    openDoor(360)
     #motor_a.stop(stop_action="brake")
 
 def IAMFART():
@@ -96,7 +108,7 @@ def IAMFART():
 
 def release_cycle():
     motor_a.stop(stop_action="brake")
-    motor_a.on(SpeedPercent(-20))
+    motor_a.on(SpeedPercent(-50))
     #sleep(0.5)
     #drive_forward(10)
     sleep(6.0)
@@ -113,6 +125,8 @@ COMMAND_MAP = {
     "A_OFF": lambda: motor_a.stop(stop_action="brake"),
     "B_IN": lambda: motor_b.on_for_degrees(SpeedPercent(20), -90, brake=True, block=True),
     "B_OUT": lambda: motor_b.on_for_degrees(SpeedPercent(20), 90, brake=True, block=True),
+    "OPENDOOR": lambda: openDoor(360),
+    "CLOSEDOOR": lambda: closedDoor(360),
     "COLLECT": collect_cycle,
     "RELEASE": release_cycle,
     "FORWARD_TIMED": lambda time=None: timed_drive(lambda: drive_forward(10),time or 1.0),

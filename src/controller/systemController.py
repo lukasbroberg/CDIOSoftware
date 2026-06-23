@@ -220,7 +220,7 @@ def run_detection(frame, config):
     #frame = color_correct_with_reference(frame,hvid_reference_boks)
     lines, final_boundaries = detect_boundary_lines(frame)
     final_boundaries = smooth_boundaries(final_boundaries)
-    buffered_boundaries = expand_boundaries(final_boundaries, 20)
+    buffered_boundaries = expand_boundaries(final_boundaries, 30)
     image_cropped = mask_image_by_walls(frame, buffered_boundaries)
     detections = detect_objects(image_cropped, config)
     goals = detect_goals_from_aruco(frame)
