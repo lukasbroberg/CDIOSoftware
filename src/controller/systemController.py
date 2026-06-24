@@ -160,7 +160,7 @@ def get_params(window_name: str = "Camera") -> dict:
     }
 
 def init_camera():
-    cam = cv.VideoCapture(1)
+    cam = cv.VideoCapture(0)
     cam.set(cv.CAP_PROP_AUTO_EXPOSURE, 0.25)
     exposure = -1
     cam.set(cv.CAP_PROP_EXPOSURE, exposure)

@@ -1,3 +1,4 @@
+import math
 from collections import deque
 from models.Robot import Robot
 from models.Ball import Ball
@@ -12,6 +13,20 @@ from utils.pathPlanner import *
 
 # ── How many balls to collect before heading to the goal ─────────────────────
 BALLS_PER_TRIP = 5
+
+# The controller deliberately has only action states.  What it is moving
+# towards is kept separately as targetKind, rather than duplicating every
+# action for balls, waypoints and the goal.
+FIND_BALL = "FindBall"
+ALIGN_TARGET = "AlignTarget"
+MOVE_TO_TARGET = "MoveToTarget"
+PICKUP_BALL = "PickupBall"
+DROP_BALL = "DropBall"
+STOP = "Stop"
+
+BALL_TARGET = "ball"
+DROPOFF_TARGET = "dropoff"
+GOAL_TARGET = "goal"
 
 # ── Drive calibration ─────────────────────────────────────────────────────────
 # Measured from logs: robot moves ~47 px/s, so 100 px takes ~2.155 s.
@@ -34,14 +49,11 @@ class MainController:
 
     States
     ──────
-    FindBall        – pick the best ball and set it as target
-    AlignWithBall   – rotate to face the ball
-    MoveToBall      – drive until collectOffset away; uses wider angle
-                      tolerance close-up to avoid oscillation
-    PickupBall      – COLLECT (start intake) + ram forward + back up
-    AlignWithGoal   – rotate to face the goal
-    MoveToGoal      – drive until goalOffset away from the goal
-    DropBall        – RELEASE + reset
+    FindBall        – pick the best ball and plan a path
+    AlignTarget     – rotate to face the current target
+    MoveToTarget    – drive to a ball, waypoint or drop-off point
+    PickupBall      – collect a ball
+    DropBall        – release collected balls
     Stop            – nothing left to do
     """
 
@@ -56,6 +68,8 @@ class MainController:
         self.tracker = ObjectTracker(max_distance=150)
         self.currentPath = []
         self.cross = None
+        self.targetKind: str | None = None
+        self.collectedTargetIds: set[int] = set()
 
     # ─────────────────────────────────────────────────────────────────────────
     # Scene initialisation (called every frame by main.py)
@@ -162,18 +176,17 @@ class MainController:
 
     #Returns the nearest Ball - TODO add compatibility to find orange balls
     def _find_best_ball(self) -> Ball | None:
-        if not self.balls:
+        balls = self._available_balls()
+        if not balls:
             return None
-        return self.robot.findNearestBall(self.balls)
+        return self.robot.findNearestBall(balls)
         #orange = next((b for b in self.balls if b.isOrange), None)
         #if orange:
         #    return orange
     
     def _find_best_white_ball(self) -> Ball | None:
-        if not self.balls:
-            return None
         white_balls = []
-        for ball in self.balls:
+        for ball in self._available_balls():
             if not ball.isOrange:
                 white_balls.append(ball)
         
@@ -183,35 +196,34 @@ class MainController:
         return self.robot.findNearestBall(white_balls)
     
     def _find_best_orange_ball(self) -> Ball | None:
-        if not self.balls:
-            return None
         orange_balls = []
-        for ball in self.balls:
+        for ball in self._available_balls():
             if ball.isOrange:
                 orange_balls.append(ball)
         if orange_balls is None or len(orange_balls) == 0:
             return self._find_best_ball()
         return self.robot.findNearestBall(orange_balls)
 
-    def _planPathTo(self, target: Ball):
-        self.currentPath = build_path(
+    def _available_balls(self) -> list[Ball]:
+        """Ignore a tracked ball after collecting it until vision removes it."""
+        return [
+            ball for ball in self.balls
+            if getattr(ball, "id", None) not in self.collectedTargetIds
+        ]
+
+    def _planPathTo(self, target: Ball | Point):
+        waypoints = build_path(
             self.robot,
             target,
             cross=self.cross,
             field=self.boundaries
         )
-        # Ensure the original Ball instance is always the last point
-        self.currentPath.append(target)
-        
-        # Remove the last dict copy of the ball position
-        if self.currentPath:
-            self.currentPath.pop()
-            
-        # Append the real Ball instance as final target
         self.currentPath = [
             Point(p["x"], p["y"]) if isinstance(p, dict) else p
-            for p in self.currentPath
+            for p in waypoints
         ]
+        # The real tracked object must always be last.  A waypoint can never
+        # trigger pickup or release.
         self.currentPath.append(target)
         self.robot.target = self.currentPath[0]
 
@@ -262,13 +274,48 @@ class MainController:
         return True
 
     def _go_to_drop_off_ball(self):
+        if self.smallGoal is None:
+            return False
+
         dropOffPoint = Point(
             self.smallGoal.x+ROBOTCONFIG["goalDropOffOffset"],
             self.smallGoal.y
         )
         self._planPathTo(dropOffPoint)
-        #self.robot.setTarget(dropOffPoint)
-        self._go_to_state("AlignWithDropOffPoint", "quota reached")
+        self.targetKind = DROPOFF_TARGET
+        self._go_to_state(ALIGN_TARGET, "heading to drop-off")
+        return True
+
+    def _advance_path(self) -> bool:
+        """Select the next waypoint. Returns False after the final target."""
+        if self.currentPath:
+            self.currentPath.pop(0)
+        if not self.currentPath:
+            return False
+        self.robot.target = self.currentPath[0]
+        return True
+
+    def _start_goal_alignment(self):
+        if self.smallGoal is None:
+            self.robot.target = None
+            self.targetKind = None
+            self._go_to_state(FIND_BALL, "goal lost")
+            return
+        self.robot.setTarget(self.smallGoal)
+        self.targetKind = GOAL_TARGET
+        self._go_to_state(ALIGN_TARGET, "at drop-off point")
+
+    def _move_settings(self) -> tuple[float, float]:
+        """Return (arrival threshold, max drive distance) for the current target."""
+        is_waypoint = len(self.currentPath) > 1
+        if self.targetKind == BALL_TARGET:
+            return (ROBOTCONFIG["waypointOffset"] if is_waypoint
+                    else ROBOTCONFIG["collectOffset"], 30.0)
+        return (23.0 if is_waypoint else 5.0, 15.0)
+
+    def _has_drifted(self) -> bool:
+        """Avoid turn/move oscillation from small camera-heading changes."""
+        return not self.robot.isFacingTarget(ROBOTCONFIG["closeRangeTolerance"])
         
         
     # State machine
@@ -300,26 +347,12 @@ class MainController:
         match self.currentState:
 
             # 1. Choose a target ball
-            case "FindBall":
-                
+            case _ if self.currentState == FIND_BALL:
                 print("Picked up balls ",self.robot.pickedUpBalls)
-                
-                target = self.robot.target
-                if target is not None:
-                    if isinstance(target, TrackedObject | Ball):
-                        self._go_to_state("AlignWithBall", "Has target, aligns with target now")
-                    #else:
-                        #if self.smallGoal is None:
-                        #    print("[STATE] Goal not yet detected – waiting")
-                        #    return
-                        #self.robot.setTarget(self.smallGoal)
-
-                
                 if self.robot.pickedUpBalls >= BALLS_PER_TRIP:
                     if self.smallGoal is None:
                         print("[STATE] Goal not yet detected – waiting")
                         return
-                    #self.robot.setTarget(self.smallGoal)
                     self._go_to_drop_off_ball()
                     return
                     
@@ -335,98 +368,100 @@ class MainController:
                 if ball is None:
                     print("[STATE] No balls visible")
                     if self.robot.pickedUpBalls>0:
-                        self._go_to_drop_off_ball()   
+                        if self._go_to_drop_off_ball():
+                            return
+                        print("[STATE] Goal not yet detected – waiting")
                         return
-                    self._go_to_state("Stop", "no balls")
+                    self._go_to_state(STOP, "no balls")
                     return
                 
                 self._planPathTo(ball)
+                self.targetKind = BALL_TARGET
 
                 print(f"[STATE] Target → ({ball.x:.0f},{ball.y:.0f})  orange={ball.isOrange}")
-                self._go_to_state("AlignWithBall")
+                self._go_to_state(ALIGN_TARGET, "ball selected")
 
-            # 2. Rotate to face the ball
-            case "AlignWithBall":
+            # 2. Rotate to face whichever target is active.
+            case _ if self.currentState == ALIGN_TARGET:
                 if self.robot.target is None:
-                    self._go_to_state("FindBall", "lost target")
+                    self.targetKind = None
+                    self._go_to_state(FIND_BALL, "lost target")
                     return
-                
+
                 d = self._distance_to_target()
-                if d<18:
-                    self._go_to_state("MoveToBall", "aligned")
+                if self.targetKind == DROPOFF_TARGET and d is not None and d <= 5.0:
+                    self._start_goal_alignment()
+                    return
 
                 if self.robot.isFacingTarget():
-                    self._go_to_state("MoveToBall", "aligned")
+                    if self.targetKind == GOAL_TARGET:
+                        self._go_to_state(DROP_BALL, "goal aligned")
+                    else:
+                        self._go_to_state(MOVE_TO_TARGET, "aligned")
                     return
 
                 delta = self.robot.getDeltaAngle(self._angle_to_target())
                 print(f"[STATE] Turning {delta:+.1f}°")
                 self._enqueue_turn(delta)
 
-            #  3. Drive to Target
-            case "MoveToBall":
+            # 3. Drive to a ball or a drop-off waypoint.
+            case _ if self.currentState == MOVE_TO_TARGET:
                 if self.robot.target is None:
-                    if self.robot.pickedUpBalls<3:
-                        self._go_to_state("FindBall", "No target, finds next target")
-                        return
-                    else:
-                        self._go_to_state("Stop", "Filled with balls. goes to state: Stop")
+                    self.targetKind = None
+                    self._go_to_state(FIND_BALL, "lost target")
+                    return
 
                 d = self._distance_to_target()
-    
-                is_waypoint = not isinstance(self.robot.target, Ball | TrackedObject)
-                
-                # Waypoints use a larger threshold, balls use collectOffset
-                threshold = ROBOTCONFIG["waypointOffset"] if is_waypoint else ROBOTCONFIG["collectOffset"]
-
-                print(f"[STATE] Distance to target: {d:.0f} cm  waypoint={is_waypoint}")
+                threshold, max_drive = self._move_settings()
+                is_waypoint = len(self.currentPath) > 1
+                print(f"[STATE] Distance to target: {d:.0f} cm  kind={self.targetKind} waypoint={is_waypoint}")
 
                 if d <= threshold:
                     if is_waypoint:
-                        self.currentPath.pop(0)
-                        if self.currentPath:
-                            self.robot.target = self.currentPath[0]
-                            self._go_to_state("AlignWithBall", "waypoint reached, next point")
-                        else:
-                            self._go_to_state("FindBall", "path exhausted")
+                        self._advance_path()
+                        self._go_to_state(ALIGN_TARGET, "waypoint reached")
                         return
-                    self._go_to_state("PickupBall", "in collect range")
+                    if self.targetKind == BALL_TARGET:
+                        self._go_to_state(PICKUP_BALL, "in collect range")
+                    else:
+                        self._start_goal_alignment()
                     return
 
-
-                # Realignment check
-                if not self.robot.isFacingTarget():
-                    self._go_to_state("AlignWithBall", "drifted")
+                # Alignment needs the strict tolerance. While moving, use a
+                # wider tolerance so camera noise does not bounce us straight
+                # back to AlignTarget after every short drive command.
+                if self._has_drifted():
+                    self._go_to_state(ALIGN_TARGET, "drifted")
                     return
 
                 MIN_DRIVE_CM = 2.0
-                drive_cm = min(d - threshold, 30.0)
+                drive_cm = min(d - threshold, max_drive)
                 if drive_cm < MIN_DRIVE_CM:
                     if is_waypoint:
-                        self.currentPath.pop(0)
-                        if self.currentPath:
-                            self.robot.target = self.currentPath[0]
-                            self._go_to_state("AlignWithBall", "waypoint reached, next point")
-                        else:
-                            self._go_to_state("FindBall", "path exhausted")
+                        self._advance_path()
+                        self._go_to_state(ALIGN_TARGET, "waypoint reached")
                         return
-                    self._go_to_state("PickupBall", "close enough")
+                    if self.targetKind == BALL_TARGET:
+                        self._go_to_state(PICKUP_BALL, "close enough")
+                    else:
+                        self._start_goal_alignment()
                     return
-                
-
                 self._enqueue_forward(float(drive_cm))
 
             # 4. Collect ball, then back up
-            case "PickupBall":
+            case _ if self.currentState == PICKUP_BALL:
                 d = self._distance_to_target()
                 # Accept anything within collectOffset + MIN_DRIVE_PX — that's
                 # the same boundary MoveToBall uses to enter this state.
                 MIN_DRIVE_PX = 2.0
                 if d is not None and d > ROBOTCONFIG["collectOffset"] + MIN_DRIVE_PX:
-                    self._go_to_state("MoveToBall", "too far")
+                    self._go_to_state(MOVE_TO_TARGET, "too far")
                     return
 
                 self.robot.pickedUpBalls += 1
+                target_id = getattr(self.robot.target, "id", None)
+                if target_id is not None:
+                    self.collectedTargetIds.add(target_id)
                 self._enqueue_collect()
                 self._enqueue_forward(14.0)
                 self._enqueue_backward(14.0)
@@ -436,109 +471,19 @@ class MainController:
 
                 if self.robot.pickedUpBalls < BALLS_PER_TRIP:
                     self.robot.target = None
-                    self._go_to_state("FindBall", f"need {BALLS_PER_TRIP - self.robot.pickedUpBalls} more")
+                    self.targetKind = None
+                    self.currentPath = []
+                    self._go_to_state(FIND_BALL, f"need {BALLS_PER_TRIP - self.robot.pickedUpBalls} more")
                 else:
                     if self.smallGoal is None:
                         print("[STATE] Goal not yet detected – waiting")
                         return
-                    
                     self._go_to_drop_off_ball()
-                    
-            # Align with dropOffPoint
-            case "AlignWithDropOffPoint":
-                if self.robot.target is None:
-                    self._go_to_state("FindBall", "lost goal target")
-                    return
-                
-                if self.robot.isFacingTarget():
-                    self._go_to_state("MoveTowardsDropOffPoint", "aligned")
-                    return
-                
-                d = self._distance_to_target()
-                if d <= 5.0:
-                    self.robot.setTarget(self.smallGoal)
-                    self._go_to_state("AlignWithGoal", "in range")
-                    return
-                
-                delta = self.robot.getDeltaAngle(self._angle_to_target())
-                print(f"[STATE] Turning {delta:+.1f}°")
-                self._enqueue_turn(delta)
-                
-            case "MoveTowardsDropOffPoint":
-                if self.robot.target is None:
-                    self._go_to_state("FindBall", "lost goal target")
-                    return
-
-                if not self.robot.isFacingTarget():
-                    self._go_to_state("AlignWithDropOffPoint", "drifted")
-                    return
-
-                is_waypoint = not isinstance(self.robot.target, Ball | TrackedObject) and len(self.currentPath) > 1
-                threshold = 23.0 if is_waypoint else 5.0
-
-                d = self._distance_to_target()
-                print(f"[STATE] Distance to dropoff: {d:.0f} cm  waypoint={is_waypoint}")
-
-                if d <= threshold:
-                    if is_waypoint:
-                        self.currentPath.pop(0)
-                        self.robot.target = self.currentPath[0]
-                        self._go_to_state("AlignWithDropOffPoint", "waypoint reached, next point")
-                    else:
-                        self.robot.setTarget(self.smallGoal)
-                        self._go_to_state("AlignWithGoal", "at dropoff point")
-                    return
-
-                if not self.robot.isFacingTarget():
-                    self._go_to_state("AlignWithDropOffPoint", "drifted")
-                    return
-
-                drive_cm = min(d - threshold, 15.0)
-                self._enqueue_forward(drive_cm)
-                
-
-            #  5. Rotate to face the goal 
-            case "AlignWithGoal":
-                if self.robot.target is None:
-                    self._go_to_state("FindBall", "lost goal target")
-                    return
-
-                if self.robot.isFacingTarget():
-                    self._go_to_state("DropBall", "aligned")
-                    return
-
-                delta = self.robot.getDeltaAngle(self._angle_to_target())
-                print(f"[STATE] Turning {delta:+.1f}°")
-                self._enqueue_turn(delta)
-
-            #  6. Drive to goalOffset distance from the goal
-            case "MoveToGoal":
-                if self.robot.target is None:
-                    self._go_to_state("FindBall", "lost goal target")
-                    return
-
-                if not self.robot.isFacingTarget():
-                    self._go_to_state("AlignWithGoal", "drifted")
-                    return
-
-                d = self._distance_to_target()
-                print(f"[STATE] Distance to goal: {d:.0f} px")
-
-                if d <= ROBOTCONFIG["goalDropOffOffset"]:
-                    self._go_to_state("DropBall", "in range")
-                    return
-
-                drive_px = min(d - ROBOTCONFIG["goalDropOffOffset"], 150)
-                #Safe quit to release ball, removes unlimited cycle of moving forward
-                if(drive_px<0.1):
-                    self._go_to_state("DropBall", "in range")
-                
-                self._enqueue_forward(drive_px)
 
             # 7. Release balls at goal
-            case "DropBall":
+            case _ if self.currentState == DROP_BALL:
                 if not self.robot.isFacingTarget():
-                    self._go_to_state("AlignWithGoal", "not facing")
+                    self._go_to_state(ALIGN_TARGET, "not facing goal")
                     return
 
                 #d = self._distance_to_target()
@@ -550,21 +495,21 @@ class MainController:
                 self.robot.deliveredBalls += self.robot.pickedUpBalls
                 self.robot.pickedUpBalls = 0
                 self.robot.target = None
+                self.targetKind = None
+                self.currentPath = []
                 print("[STATE] Released all balls")
-                self._go_to_state("FindBall", "delivery done")
+                self._go_to_state(FIND_BALL, "delivery done")
                 self.commandsQueue.append("COLLECT")
 
             # Terminal 
-            case "Stop":
-                if self.robot.pickedUpBalls>0 or self.robot.deliveredBalls<=0:
-                    self.currentState="AlignWithDropOffPoint"
-                    print("Robot stopped, no balls detected. Moving robot away")
-                
+            case _ if self.currentState == STOP:
+                if self.robot.pickedUpBalls > 0 and self._go_to_drop_off_ball():
+                    return
                 print("[STATE] Robot stopped – nothing left to do")
 
             case _:
                 print(f"[STATE] Unknown state '{self.currentState}'")
-                self._go_to_state("Stop")
+                self._go_to_state(STOP)
 
     # Command dispatch (called by main.py)
 

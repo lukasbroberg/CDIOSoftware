@@ -8,6 +8,8 @@ DEFAULTS = {
     "nearCrossDistance": 16,
     "crossSafetyRadius": 20,
     "approachDistance": 11,
+    # Keep waypoints 10 cm outside the cross safety radius.  The resulting
+    # cardinal points are therefore safe to drive between.
     "waypointOffset": 10,
 }
 
@@ -92,38 +94,55 @@ def path_blocked_by_cross(start, target, cross):
 
     return distance(closest_point, cross) < DEFAULTS["crossSafetyRadius"]
 
-def create_cross_waypoint(robot, target, cross, field):
+def create_cross_waypoints(cross, field):
+    """Return the four fixed, cardinal waypoints around the cross.
+
+    The points are ordered clockwise: right, bottom, left, top.  Keeping this
+    order deterministic also gives stable routes when two options cost the
+    same amount.
+    """
     cx, cy = _px(cross)
-    
-    # Calculate the total safe distance from the center in centimeters
-    # (Safety radius + our extra waypoint clearance)
     total_safety_cm = DEFAULTS["crossSafetyRadius"] + DEFAULTS["waypointOffset"]
-    
-    # Convert this real-world centimeter distance into pixels
     offset_px = total_safety_cm * PIXELS_PER_CM_FLOOR
 
-    # Generate options using the pixel-converted offset
-    waypoint_options = [
-        {"x": cx - offset_px, "y": cy - offset_px},
-        {"x": cx + offset_px, "y": cy - offset_px},
-        {"x": cx - offset_px, "y": cy + offset_px},
-        {"x": cx + offset_px, "y": cy + offset_px},
+    points = [
+        {"x": cx + offset_px, "y": cy},  # right
+        {"x": cx, "y": cy + offset_px},  # bottom
+        {"x": cx - offset_px, "y": cy},  # left
+        {"x": cx, "y": cy - offset_px},  # top
     ]
+    return [clamp_to_field(point, field) for point in points]
 
-    safe_options = [
-        clamp_to_field(p, field)
-        for p in waypoint_options
-        if not path_blocked_by_cross(robot, clamp_to_field(p, field), cross)
-        and not path_blocked_by_cross(clamp_to_field(p, field), target, cross)
+
+def _route_around_cross_clockwise(start, target, cross, field):
+    """Route through the four cardinal points until the target is visible.
+
+    The first reachable point closest to the robot is selected, then the
+    robot travels clockwise (right → bottom → left → top).  This avoids
+    diagonal shortcuts that can clip the cross and keeps the route predictable
+    for the physical robot.
+    """
+    waypoints = create_cross_waypoints(cross, field)
+    reachable = [
+        index for index, waypoint in enumerate(waypoints)
+        if not path_blocked_by_cross(start, waypoint, cross)
     ]
+    if not reachable:
+        return []
 
-    options = safe_options if safe_options else [
-        clamp_to_field(p, field) for p in waypoint_options
-    ]
+    current = min(reachable, key=lambda index: (_distance_px(start, waypoints[index]), index))
+    route = []
+    for _ in range(len(waypoints)):
+        waypoint = waypoints[current]
+        route.append(waypoint)
+        if not path_blocked_by_cross(waypoint, target, cross):
+            return route
+        next_index = (current + 1) % len(waypoints)
+        if path_blocked_by_cross(waypoint, waypoints[next_index], cross):
+            return []
+        current = next_index
 
-    # Sort by real-world distance
-    options.sort(key=lambda p: distance(robot, p) + distance(p, target))
-    return options[0]
+    return []
 
 
 def build_path(robot, target, cross, field):
@@ -132,44 +151,11 @@ def build_path(robot, target, cross, field):
     Distance/angle calculations use pixel_to_world for real-world accuracy.
     Returns list of pixel-space dicts.
     """
-    tx, ty = _px(target)
-    final_target = {"x": tx, "y": ty}
-    
-    blocked = path_blocked_by_cross(robot, final_target, cross)
-    ball_type = classify_ball(target, cross)
-    print(f"[PATH] cross={cross} blocked={blocked} ball_type={ball_type}")
+    if cross is None or field is None or not path_blocked_by_cross(robot, target, cross):
+        return []
 
-    near_wall = (
-        tx < field["left"]   + DEFAULTS["wallBallThreshold"]
-        or tx > field["right"]  - DEFAULTS["wallBallThreshold"]
-        or ty < field["top"]    + DEFAULTS["wallBallThreshold"]
-        or ty > field["bottom"] - DEFAULTS["wallBallThreshold"]
-    )
-
-    if near_wall:
-        final_target = clamp_to_field(target, field, DEFAULTS["wallBallThreshold"])
-
-    ball_type = classify_ball(target, cross)
-
-    if ball_type == "nearCross":
-        final_target = clamp_to_field(
-            get_approach_point(target, cross, DEFAULTS["approachDistance"]),
-            field,
-            DEFAULTS["robotSafetyMargin"],
-        )
-
-    path = []
-
-    if path_blocked_by_cross(robot, final_target, cross):
-        waypoint = create_cross_waypoint(robot, final_target, cross, field)
-        path.append(waypoint)
-
-    #path.append(final_target)
-
-    #if final_target != {"x": tx, "y": ty}:
-    #    path.append({"x": tx, "y": ty})
-        
-
+    path = _route_around_cross_clockwise(robot, target, cross, field)
+    print(f"[PATH] cross blocks direct route; waypoints={path}")
     return path
 
 
