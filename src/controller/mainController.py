@@ -209,6 +209,10 @@ class MainController:
         return [
             ball for ball in self.balls
             if getattr(ball, "id", None) not in self.collectedTargetIds
+            and getDistance(
+                self.robot.x, self.robot.y, 26,
+                ball.x, ball.y, 0,
+            ) >= ROBOTCONFIG["minimumTargetDistance"]
         ]
 
     def _planPathTo(self, target: Ball | Point):

@@ -24,7 +24,7 @@ from utils.perspectiveCorrection import PIXELS_PER_CM_FLOOR
 
 
 class Target:
-    def __init__(self, x=200, y=200, is_orange=False, target_id=None):
+    def __init__(self, x=500, y=200, is_orange=False, target_id=None):
         self.x = x
         self.y = y
         self.isOrange = is_orange
@@ -99,7 +99,7 @@ class MainControllerStateTests(unittest.TestCase):
 
     def test_collected_tracking_id_is_not_selected_again(self):
         collected = Target(target_id=1)
-        next_ball = Target(x=300, target_id=2)
+        next_ball = Target(x=500, target_id=2)
         self.controller.currentState = PICKUP_BALL
         self.controller.targetKind = BALL_TARGET
         self.controller.robot.target = collected
@@ -113,6 +113,15 @@ class MainControllerStateTests(unittest.TestCase):
         self.controller.updateRobotState()
 
         self.assertIs(self.controller.robot.target, next_ball)
+
+    def test_detection_on_robot_is_not_an_available_target(self):
+        self.controller.robot.x = 960
+        self.controller.robot.y = 540
+        false_detection = Target(960, 540, target_id=1)
+        real_ball = Target(960 + 60 * PIXELS_PER_CM_FLOOR, 540, target_id=2)
+        self.controller.balls = [false_detection, real_ball]
+
+        self.assertEqual(self.controller._available_balls(), [real_ball])
 
     def test_dropoff_and_goal_use_the_same_align_and_move_states(self):
         dropoff = Target(400, 300)

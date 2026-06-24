@@ -4,7 +4,9 @@ ROBOTCONFIG = {
     'distanceTolerance': 100,   # px — "close enough to goal" for RELEASE
     'collectOffset': 12.0,        # cm — stop MoveToBall here, then COLLECT + ram forward
     'waypointOffset': 17.0,
-    'leastDistanceToBall': 100.0, # px - from which targets least amount of distance
+    # Ground distance in cm.  Ignore detections inside the robot footprint;
+    # these are usually balls falsely detected on the robot itself.
+    'minimumTargetDistance': 25.0,
     'backupDistance': 2.0,      # px — reverse this far after collecting
     'bounadryOffset': 50,       # px - boundary's buffer 
     'fullTurnTime': 6.48,

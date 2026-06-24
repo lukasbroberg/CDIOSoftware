@@ -66,22 +66,39 @@ async def camera_task(cam, config, image_rec_active):
         
 async def control_task(controller, reader, writer):
     global latest_scene
+    connection_reported = False
 
     while True:
         if latest_scene is None:
             await asyncio.sleep(0.1)  # wait for camera to produce a scene
             continue
-        
-        
-        response = await run_controller(controller, latest_scene, reader, writer,True)
-        
+
+        # Do not update the state machine while a command cannot be sent.
+        # Otherwise a queued command makes updateRobotState print "Queue not
+        # empty" forever and the robot never receives the command.
+        if reader is None or writer is None or writer.is_closing():
+            if not connection_reported:
+                print("[CMD] Robot connection unavailable – retrying")
+                connection_reported = True
+            reader, writer = await establishWriteReadConnection()
+            await asyncio.sleep(2)
+            continue
+
+        connection_reported = False
+        try:
+            response = await run_controller(controller, latest_scene, reader, writer, True)
+        except (ConnectionError, OSError, asyncio.IncompleteReadError) as error:
+            print(f"[CMD] Connection lost ({error}) – reconnecting")
+            writer.close()
+            reader, writer = None, None
+            continue
+
         if response is None:
-            print("no response")
+            print("[CMD] No response from robot")
             await asyncio.sleep(0.5)
             continue
 
-        parts = response.split("::")
-        if parts[0] == "DONE":
+        if response.split("::", 1)[0] == "DONE":
             await asyncio.sleep(0.5)  # wait before next command
             
 #Live loop of camera
@@ -236,10 +253,11 @@ def run_detection(frame, config):
 
         
 async def run_controller(controller: MainController, scene, reader, writer, sendCommands: bool = True):
+    if reader is None or writer is None or writer.is_closing():
+        return None
+
     controller.initializeObjects(scene)
     controller.updateRobotState()
-    if reader is None or writer is None:
-        return "DONE::NoCommand"
     if sendCommands is True and len(controller.commandsQueue) > 0:
         response: str = await send_command(reader, writer, controller.passCommandToRobot())
         return response

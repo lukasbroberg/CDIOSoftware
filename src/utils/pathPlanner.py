@@ -6,11 +6,12 @@ DEFAULTS = {
     "robotSafetyMargin": 8,
     "wallBallThreshold": 12,
     "nearCrossDistance": 16,
-    "crossSafetyRadius": 20,
+    # The physical cross plus a conservative collision buffer, in cm.
+    "crossSafetyRadius": 30,
     "approachDistance": 11,
-    # Keep waypoints 10 cm outside the cross safety radius.  The resulting
+    # Keep waypoints 15 cm outside the cross safety radius.  The resulting
     # cardinal points are therefore safe to drive between.
-    "waypointOffset": 10,
+    "waypointOffset": 15,
 }
 
 
