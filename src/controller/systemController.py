@@ -77,12 +77,12 @@ async def control_task(controller, reader, writer):
         
         if response is None:
             print("no response")
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(0.5)
             continue
 
         parts = response.split("::")
         if parts[0] == "DONE":
-            await asyncio.sleep(1.0)  # wait before next command
+            await asyncio.sleep(0.5)  # wait before next command
             
 #Live loop of camera
 async def image_rec_from_live_video(image_rec_active: bool, runLoop: bool):

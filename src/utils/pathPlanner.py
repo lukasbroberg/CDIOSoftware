@@ -164,10 +164,10 @@ def build_path(robot, target, cross, field):
         waypoint = create_cross_waypoint(robot, final_target, cross, field)
         path.append(waypoint)
 
-    path.append(final_target)
+    #path.append(final_target)
 
-    if final_target != {"x": tx, "y": ty}:
-        path.append({"x": tx, "y": ty})
+    #if final_target != {"x": tx, "y": ty}:
+    #    path.append({"x": tx, "y": ty})
         
 
     return path

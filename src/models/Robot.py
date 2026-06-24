@@ -22,7 +22,7 @@ class Robot:
         for i, ball in enumerate(balls):
             d = getDistance(self.x,self.y,ball.x,ball.y,26,0)
             #Check if the ball is too close - might be the robot itself then.
-            if(d<ROBOTCONFIG['leastDistanceToBall'] and len(balls)>1):
+            if(d<ROBOTCONFIG['leastDistanceToBall']):
                 continue
             if nearest is None or nearestDist is None:
                 nearestDist=d
@@ -54,8 +54,12 @@ class Robot:
         import copy
         _target = copy.copy(target)
         self.target = _target
-        self.target.x = _target.x + ROBOTCONFIG['targetOffsetX']
-        self.target.y = _target.y + ROBOTCONFIG['targetOffsetY']
+        if isinstance(target, Goal):
+            self.target.x = _target.x 
+            self.target.y = _target.y
+        else:
+            self.target.x = _target.x + ROBOTCONFIG['targetOffsetX']
+            self.target.y = _target.y + ROBOTCONFIG['targetOffsetY']
     
     def getDeltaAngle(self, targetAngle_deg):
         if targetAngle_deg is None:
