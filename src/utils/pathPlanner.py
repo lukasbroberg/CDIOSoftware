@@ -3,15 +3,17 @@ from utils.perspectiveCorrection import pixel_to_world, HEIGHT_ROBOT, HEIGHT_FLO
 
 
 DEFAULTS = {
-    "robotSafetyMargin": 8,
+    "robotSafetyMargin": 18,
     "wallBallThreshold": 12,
     "nearCrossDistance": 16,
-    # The physical cross plus a conservative collision buffer, in cm.
+    # Pixel-space route safety around the cross.  The overlay and robot drive
+    # commands are ultimately pixel targets, so the collision check must agree
+    # with the drawn line on the camera frame.
     "crossSafetyRadius": 30,
     "approachDistance": 11,
-    # Keep waypoints 15 cm outside the cross safety radius.  The resulting
-    # cardinal points are therefore safe to drive between.
-    "waypointOffset": 15,
+    # Keep route points just outside the no-go circle.  Too large a value
+    # pushes the robot into the bands; too small clips the cross.
+    "waypointOffset": 10,
 }
 
 
@@ -93,14 +95,25 @@ def path_blocked_by_cross(start, target, cross):
 
     closest_point = {"x": sx + t * dx, "y": sy + t * dy}
 
-    return distance(closest_point, cross) < DEFAULTS["crossSafetyRadius"]
+    safety_radius_px = DEFAULTS["crossSafetyRadius"] * PIXELS_PER_CM_FLOOR
+    return _distance_px(closest_point, cross) < safety_radius_px
+
+
+def _inside_field(point, field, margin=DEFAULTS["robotSafetyMargin"]):
+    px, py = _px(point)
+    margin_px = margin * PIXELS_PER_CM_FLOOR
+    return (
+        field["left"] + margin_px <= px <= field["right"] - margin_px
+        and field["top"] + margin_px <= py <= field["bottom"] - margin_px
+    )
 
 def create_cross_waypoints(cross, field):
-    """Return the four fixed, cardinal waypoints around the cross.
+    """Return fixed waypoints around a square perimeter outside the cross.
 
-    The points are ordered clockwise: right, bottom, left, top.  Keeping this
-    order deterministic also gives stable routes when two options cost the
-    same amount.
+    The points are ordered clockwise starting at right:
+    right, bottom-right, bottom, bottom-left, left, top-left, top, top-right.
+    Moving between neighbouring points follows the outside of the square and
+    avoids the old diagonal right→bottom shortcut that clipped the cross.
     """
     cx, cy = _px(cross)
     total_safety_cm = DEFAULTS["crossSafetyRadius"] + DEFAULTS["waypointOffset"]
@@ -108,42 +121,62 @@ def create_cross_waypoints(cross, field):
 
     points = [
         {"x": cx + offset_px, "y": cy},  # right
+        {"x": cx + offset_px, "y": cy + offset_px},  # bottom-right
         {"x": cx, "y": cy + offset_px},  # bottom
+        {"x": cx - offset_px, "y": cy + offset_px},  # bottom-left
         {"x": cx - offset_px, "y": cy},  # left
+        {"x": cx - offset_px, "y": cy - offset_px},  # top-left
         {"x": cx, "y": cy - offset_px},  # top
+        {"x": cx + offset_px, "y": cy - offset_px},  # top-right
     ]
-    return [clamp_to_field(point, field) for point in points]
+    return [point for point in points if _inside_field(point, field)]
 
 
-def _route_around_cross_clockwise(start, target, cross, field):
-    """Route through the four cardinal points until the target is visible.
+def _dedupe_consecutive(points):
+    deduped = []
+    for point in points:
+        if not deduped or _distance_px(deduped[-1], point) > 1.0:
+            deduped.append(point)
+    return deduped
 
-    The first reachable point closest to the robot is selected, then the
-    robot travels clockwise (right → bottom → left → top).  This avoids
-    diagonal shortcuts that can clip the cross and keeps the route predictable
-    for the physical robot.
-    """
+
+def _segments_clear(route, start, target, cross):
+    return all(
+        not path_blocked_by_cross(a, b, cross)
+        for a, b in zip([start, *route], [*route, target])
+    )
+
+
+def _route_around_cross(start, target, cross, field):
+    """Find the shortest safe route around the cross perimeter."""
     waypoints = create_cross_waypoints(cross, field)
-    reachable = [
-        index for index, waypoint in enumerate(waypoints)
-        if not path_blocked_by_cross(start, waypoint, cross)
-    ]
-    if not reachable:
+    candidates = []
+
+    for start_index, start_waypoint in enumerate(waypoints):
+        if path_blocked_by_cross(start, start_waypoint, cross):
+            continue
+
+        for direction in (1, -1):
+            route = []
+            current = start_index
+            for _ in range(len(waypoints)):
+                waypoint = waypoints[current]
+                route.append(waypoint)
+                clean_route = _dedupe_consecutive(route)
+
+                if _segments_clear(clean_route, start, target, cross):
+                    candidates.append(clean_route)
+                    break
+
+                next_index = (current + direction) % len(waypoints)
+                if path_blocked_by_cross(waypoint, waypoints[next_index], cross):
+                    break
+                current = next_index
+
+    if not candidates:
         return []
 
-    current = min(reachable, key=lambda index: (_distance_px(start, waypoints[index]), index))
-    route = []
-    for _ in range(len(waypoints)):
-        waypoint = waypoints[current]
-        route.append(waypoint)
-        if not path_blocked_by_cross(waypoint, target, cross):
-            return route
-        next_index = (current + 1) % len(waypoints)
-        if path_blocked_by_cross(waypoint, waypoints[next_index], cross):
-            return []
-        current = next_index
-
-    return []
+    return min(candidates, key=lambda route: (get_path_cost(route, start), len(route)))
 
 
 def build_path(robot, target, cross, field):
@@ -155,7 +188,7 @@ def build_path(robot, target, cross, field):
     if cross is None or field is None or not path_blocked_by_cross(robot, target, cross):
         return []
 
-    path = _route_around_cross_clockwise(robot, target, cross, field)
+    path = _route_around_cross(robot, target, cross, field)
     print(f"[PATH] cross blocks direct route; waypoints={path}")
     return path
 

@@ -176,6 +176,10 @@ class MainController:
 
     #Returns the nearest Ball - TODO add compatibility to find orange balls
     def _find_best_ball(self) -> Ball | None:
+        locked_edge_target = self._locked_edge_target()
+        if locked_edge_target is not None:
+            return locked_edge_target
+
         balls = self._available_balls()
         if not balls:
             return None
@@ -185,6 +189,10 @@ class MainController:
         #    return orange
     
     def _find_best_white_ball(self) -> Ball | None:
+        locked_edge_target = self._locked_edge_target()
+        if locked_edge_target is not None and not locked_edge_target.isOrange:
+            return locked_edge_target
+
         white_balls = []
         for ball in self._available_balls():
             if not ball.isOrange:
@@ -196,6 +204,10 @@ class MainController:
         return self.robot.findNearestBall(white_balls)
     
     def _find_best_orange_ball(self) -> Ball | None:
+        locked_edge_target = self._locked_edge_target()
+        if locked_edge_target is not None and locked_edge_target.isOrange:
+            return locked_edge_target
+
         orange_balls = []
         for ball in self._available_balls():
             if ball.isOrange:
@@ -204,21 +216,86 @@ class MainController:
             return self._find_best_ball()
         return self.robot.findNearestBall(orange_balls)
 
+    def _locked_edge_target(self) -> Ball | None:
+        """Keep collecting the selected edge ball instead of switching target.
+
+        Edge-risk should change *how* we approach/pick up the ball, not whether
+        we keep chasing it.  Without this lock the controller can keep selecting
+        a different nearby ball while the robot is already committed to an edge
+        pickup, which creates path churn.
+        """
+        if self.targetKind != BALL_TARGET or not self.currentPath:
+            return None
+
+        target = self.currentPath[-1]
+        if getattr(target, "id", None) in self.collectedTargetIds:
+            return None
+        if self._is_in_cross_ignore_zone(target):
+            return None
+        if not self._is_near_boundary(target):
+            return None
+        return target
+
     def _available_balls(self) -> list[Ball]:
         """Ignore a tracked ball after collecting it until vision removes it."""
         return [
             ball for ball in self.balls
             if getattr(ball, "id", None) not in self.collectedTargetIds
+            and not self._is_in_cross_ignore_zone(ball)
             and getDistance(
                 self.robot.x, self.robot.y, 26,
                 ball.x, ball.y, 0,
             ) >= ROBOTCONFIG["minimumTargetDistance"]
         ]
 
-    def _planPathTo(self, target: Ball | Point):
+    def _is_in_cross_ignore_zone(self, ball: Ball) -> bool:
+        if self.cross is None:
+            return False
+        return distance(ball, self.cross) <= ROBOTCONFIG["crossBallIgnoreRadius"]
+
+    def _is_near_boundary(self, item, margin_cm: float | None = None) -> bool:
+        if self.boundaries is None or item is None:
+            return False
+
+        margin_cm = ROBOTCONFIG["edgeBallSafetyMargin"] if margin_cm is None else margin_cm
+        margin_px = margin_cm * PIXELS_PER_CM_FLOOR
+        return not (
+            self.boundaries["left"] + margin_px <= item.x <= self.boundaries["right"] - margin_px
+            and self.boundaries["top"] + margin_px <= item.y <= self.boundaries["bottom"] - margin_px
+        )
+
+    def _edge_approach_point(self, target: Ball | Point) -> Point | None:
+        """Return a safer inside-field waypoint before collecting an edge ball."""
+        if self.boundaries is None or not self._is_near_boundary(target):
+            return None
+
+        margin_px = ROBOTCONFIG["edgeBallApproachMargin"] * PIXELS_PER_CM_FLOOR
+        safe_x = max(
+            self.boundaries["left"] + margin_px,
+            min(self.boundaries["right"] - margin_px, target.x),
+        )
+        safe_y = max(
+            self.boundaries["top"] + margin_px,
+            min(self.boundaries["bottom"] - margin_px, target.y),
+        )
+
+        if math.isclose(safe_x, target.x) and math.isclose(safe_y, target.y):
+            return None
+
+        approach = Point(safe_x, safe_y)
+        approach.is_edge_approach = True
+        print(
+            f"[PATH] edge ball; approach=({safe_x:.0f},{safe_y:.0f}) "
+            f"before target=({target.x:.0f},{target.y:.0f})"
+        )
+        return approach
+
+    def _planPathTo(self, target: Ball | Point, allow_edge_approach: bool = False):
+        edge_approach = self._edge_approach_point(target) if allow_edge_approach else None
+        path_target = edge_approach or target
         waypoints = build_path(
             self.robot,
-            target,
+            path_target,
             cross=self.cross,
             field=self.boundaries
         )
@@ -226,6 +303,8 @@ class MainController:
             Point(p["x"], p["y"]) if isinstance(p, dict) else p
             for p in waypoints
         ]
+        if edge_approach is not None:
+            self.currentPath.append(edge_approach)
         # The real tracked object must always be last.  A waypoint can never
         # trigger pickup or release.
         self.currentPath.append(target)
@@ -238,10 +317,10 @@ class MainController:
         self.commandsQueue.append(f"{direction}::{t}")
 
     def _enqueue_forward(self, cm: float):
-        self.commandsQueue.append(f"FORWARD_TIMED::{_drive_time(cm+1.0)}")
+        self.commandsQueue.append(f"FORWARD_TIMED::{_drive_time(cm)}")
 
     def _enqueue_backward(self, cm: float):
-        self.commandsQueue.append(f"BACKWARD_TIMED::{_drive_time(cm+1.0)}")
+        self.commandsQueue.append(f"BACKWARD_TIMED::{_drive_time(cm)}")
         
     def _enqueue_collect(self):
         self.commandsQueue.append(f"COLLECT")
@@ -260,22 +339,12 @@ class MainController:
 
 
     # checks whether or not the robot is too close to the boundary
-    def is_danger_zone(self, item):        
-        if self.boundaries is None:
+    def is_danger_zone(self, item):
+        if self.boundaries is None or item is None:
             return False
-        
-        if item is None:
-            return False
-        
+
         print(f"[DANGER CHECK] pos=({item.x:.0f},{item.y:.0f}) boundaries={self.boundaries} margin={ROBOTCONFIG['maxDistToBoundary']}")
-        
-        if (item.y-ROBOTCONFIG["maxDistToBoundary"]>self.boundaries["top"] and
-            item.y+ROBOTCONFIG["maxDistToBoundary"]<self.boundaries["bottom"] and
-            item.x+ROBOTCONFIG["maxDistToBoundary"]<self.boundaries["right"] and
-            item.x-ROBOTCONFIG["maxDistToBoundary"]>self.boundaries["left"]):
-            return False
-        
-        return True
+        return self._is_near_boundary(item, ROBOTCONFIG["maxDistToBoundary"])
 
     def _go_to_drop_off_ball(self):
         if self.smallGoal is None:
@@ -313,9 +382,9 @@ class MainController:
         """Return (arrival threshold, max drive distance) for the current target."""
         is_waypoint = len(self.currentPath) > 1
         if self.targetKind == BALL_TARGET:
-            return (ROBOTCONFIG["waypointOffset"] if is_waypoint
+            return (ROBOTCONFIG["waypointArrivalTolerance"] if is_waypoint
                     else ROBOTCONFIG["collectOffset"], 30.0)
-        return (23.0 if is_waypoint else 5.0, 15.0)
+        return (ROBOTCONFIG["waypointArrivalTolerance"] if is_waypoint else 5.0, 15.0)
 
     def _has_drifted(self) -> bool:
         """Avoid turn/move oscillation from small camera-heading changes."""
@@ -336,7 +405,8 @@ class MainController:
             return
         
         if self.currentState is None:
-            self._go_to_state("FindBall", "init")
+            self._go_to_drop_off_ball()
+            #self._go_to_state("FindBall", "init")
             return
 
         #Log each state
@@ -371,15 +441,15 @@ class MainController:
                 
                 if ball is None:
                     print("[STATE] No balls visible")
-                    if self.robot.pickedUpBalls>0:
-                        if self._go_to_drop_off_ball():
-                            return
-                        print("[STATE] Goal not yet detected – waiting")
+                    #if self.robot.pickedUpBalls>0:
+                    if self._go_to_drop_off_ball():
                         return
-                    self._go_to_state(STOP, "no balls")
+                    print("[STATE] Goal not yet detected – waiting")
                     return
+                    #self._go_to_state(STOP, "no balls")
+                    #return
                 
-                self._planPathTo(ball)
+                self._planPathTo(ball, allow_edge_approach=True)
                 self.targetKind = BALL_TARGET
 
                 print(f"[STATE] Target → ({ball.x:.0f},{ball.y:.0f})  orange={ball.isOrange}")
@@ -466,12 +536,17 @@ class MainController:
                 target_id = getattr(self.robot.target, "id", None)
                 if target_id is not None:
                     self.collectedTargetIds.add(target_id)
+                pickup_drive_cm = (
+                    ROBOTCONFIG["edgeCollectForward"]
+                    if self._is_near_boundary(self.robot.target)
+                    else 14.0
+                )
                 self._enqueue_collect()
-                self._enqueue_forward(14.0)
-                self._enqueue_backward(14.0)
+                self._enqueue_forward(pickup_drive_cm)
+                self._enqueue_backward(pickup_drive_cm)
 
                 print(f"[STATE] Collecting ball #{self.robot.pickedUpBalls}  "
-                      f"(backup {ROBOTCONFIG['backupDistance']}px)")
+                      f"(pickup drive {pickup_drive_cm:.1f}cm)")
 
                 if self.robot.pickedUpBalls < BALLS_PER_TRIP:
                     self.robot.target = None
