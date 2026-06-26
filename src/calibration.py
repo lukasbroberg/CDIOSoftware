@@ -5,7 +5,7 @@ import math
 # Change this to the actual size of the object you are measuring on the floor!
 # For example: an A4 sheet of paper is 29.7 cm long, or a standard ruler is 30.0 cm.
 REAL_WORLD_SIZE_CM = 4.0
-CAMERA_INDEX = 1
+CAMERA_INDEX = 0
 # ─────────────────────────────────────────────────────────────────────────────
 
 clicked_points = []

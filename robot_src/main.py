@@ -60,10 +60,10 @@ def timed_drive(action, duration=1.0):
     stop_drive()
     
 def closedDoor(degrees):
-    motor_b.on_for_degrees(SpeedPercent(25),-degrees)
+    motor_b.on_for_degrees(SpeedPercent(25),degrees)
     
 def openDoor(degrees):
-    motor_b.on_for_degrees(SpeedPercent(25),degrees)
+    motor_b.on_for_degrees(SpeedPercent(25),-degrees)
 
 
 def nudge_forward():
@@ -93,11 +93,6 @@ def nudge_right():
 #Starts regular pick-up motors, and closes the walls.
 def collect_cycle():
     motor_a.on(SpeedPercent(50))
-    closedDoor(360)
-    sleep(1.0)
-    nudge_forward()
-    sleep(1.0)
-    openDoor(360)
     #motor_a.stop(stop_action="brake")
 
 def IAMFART():
@@ -125,12 +120,12 @@ COMMAND_MAP = {
     "A_OFF": lambda: motor_a.stop(stop_action="brake"),
     "B_IN": lambda: motor_b.on_for_degrees(SpeedPercent(20), -90, brake=True, block=True),
     "B_OUT": lambda: motor_b.on_for_degrees(SpeedPercent(20), 90, brake=True, block=True),
-    "OPENDOOR": lambda: openDoor(360),
-    "CLOSEDOOR": lambda: closedDoor(360),
+    "OPENDOOR": lambda: openDoor(420),
+    "CLOSEDOOR": lambda: closedDoor(420),
     "COLLECT": collect_cycle,
     "RELEASE": release_cycle,
-    "FORWARD_TIMED": lambda time=None: timed_drive(lambda: drive_forward(10),time or 1.0),
-    "BACKWARD_TIMED": lambda time=None: timed_drive(lambda: drive_backward(10),time or 25),
+    "FORWARD_TIMED": lambda time=None: timed_drive(lambda: drive_forward(25),time or 1.0),
+    "BACKWARD_TIMED": lambda time=None: timed_drive(lambda: drive_backward(25),time or 25),
     "FORWARD": lambda v=None: drive_forward(v or 10),
     "BACKWARD": lambda v=None: drive_backward(v or 10),
     "LEFT_TIMED": lambda time=None: timed_drive(lambda: turn_left(TURN_SPEED), time or 1.0),

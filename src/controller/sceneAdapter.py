@@ -16,12 +16,13 @@ def detection_to_point(det):
     }
 
 
-def build_scene_from_camera(detections, goals, robot_pos, robot_angle, boundaries):
+def build_scene_from_camera(detections, goals, robot_pos, robot_angle, boundaries, cross):
         
     robot = None
     orange_ball = []
     white_balls = []
     _boundaries = []
+    _cross = None
 
     goal_large = None
     goal_small = None
@@ -54,6 +55,23 @@ def build_scene_from_camera(detections, goals, robot_pos, robot_angle, boundarie
             boundaries[2][1], #bottom Y (bottom left)
         ]
         
+    if cross is not None and len(cross) > 0:
+        xs = []
+        ys = []
+        for item in cross:
+            # item format: (x1, y1, x2, y2, label) or similar structure returned by your cross detector
+            x1, y1, x2, y2, label = item[:5]
+            
+            # Match the actual labels seen in your image detection overlay
+            if label in ["horizontal_wall", "vertical_wall", "cross"]:
+                xs.append(x1 + (x2 - x1) / 2)
+                ys.append(y1 + (y2 - y1) / 2)
+        
+        if xs and ys:
+            _cross = {
+                'x': sum(xs) / len(xs),
+                'y': sum(ys) / len(ys),
+            }
 
     return {
         "robot": robot,
@@ -61,5 +79,6 @@ def build_scene_from_camera(detections, goals, robot_pos, robot_angle, boundarie
         "orange_ball": orange_ball,
         "white_balls": white_balls,
         "goal_small": goal_small,
-        "boundaries": boundaries #right, left, top, bottom
+        "boundaries": boundaries, #right, left, top, bottom
+        "cross": _cross
     }

@@ -5,7 +5,7 @@ from config.config_rules import COLOR_CONFIG, MIN_AREA
 from ImageProcessing.image import loadImage, mask_image_by_walls, color_correct_with_reference
 from ImageProcessing.neutralizeImage import *
 from ImageProcessing.detection import detect_objects, detect_boundary_lines, detect_goals_from_lines, detect_goals_from_aruco, detect_robot_from_aruco, detect_boundary_cross, expand_boundaries, smooth_boundaries
-from draw.draw import draw_detections,draw_lines,draw_goals,draw_robot,draw_cross_boundary, draw_target, draw_tracked_objects
+from draw.draw import draw_detections,draw_lines,draw_goals,draw_robot,draw_cross_boundary, draw_target, draw_tracked_objects, draw_path
 from controller.mainController import *
 from config.arucoConfig import aruco_config 
 from controller.sceneAdapter import *
@@ -41,7 +41,7 @@ async def camera_task(cam, config, image_rec_active):
         #config = update_config_from_trackbars(config, params)
 
         detections, final_boundaries, goals, robot_pos, robot_angle, raw_pts, cross_boundary, buffed_boundaries = run_detection(frame, config)
-        latest_scene = build_scene_from_camera(detections, goals, robot_pos, robot_angle, buffed_boundaries)
+        latest_scene = build_scene_from_camera(detections, goals, robot_pos, robot_angle, buffed_boundaries, cross_boundary)
         latest_frame_data = (frame, detections, final_boundaries, goals, robot_angle, raw_pts, cross_boundary)
 
         target = main_controller.robot.target if main_controller and main_controller.robot else None
@@ -56,7 +56,9 @@ async def camera_task(cam, config, image_rec_active):
             cross_boundary, 
             image_rec_active,
             target=main_controller.robot.target if main_controller and main_controller.robot else None,
-            tracked_objects = main_controller.balls if main_controller and main_controller.balls else None
+            tracked_objects = main_controller.balls if main_controller and main_controller.balls else None,
+            path=main_controller.currentPath if main_controller and main_controller.currentPath else None,
+            robot=main_controller.robot
         )
 
         if cv.waitKey(1) == ord('q'):
@@ -64,23 +66,40 @@ async def camera_task(cam, config, image_rec_active):
         
 async def control_task(controller, reader, writer):
     global latest_scene
+    connection_reported = False
 
     while True:
         if latest_scene is None:
             await asyncio.sleep(0.1)  # wait for camera to produce a scene
             continue
-        
-        
-        response = await run_controller(controller, latest_scene, reader, writer,True)
-        
-        if response is None:
-            print("no response")
-            await asyncio.sleep(1.0)
+
+        # Do not update the state machine while a command cannot be sent.
+        # Otherwise a queued command makes updateRobotState print "Queue not
+        # empty" forever and the robot never receives the command.
+        if reader is None or writer is None or writer.is_closing():
+            if not connection_reported:
+                print("[CMD] Robot connection unavailable – retrying")
+                connection_reported = True
+            reader, writer = await establishWriteReadConnection()
+            await asyncio.sleep(2)
             continue
 
-        parts = response.split("::")
-        if parts[0] == "DONE":
-            await asyncio.sleep(1.0)  # wait before next command
+        connection_reported = False
+        try:
+            response = await run_controller(controller, latest_scene, reader, writer, True)
+        except (ConnectionError, OSError, asyncio.IncompleteReadError) as error:
+            print(f"[CMD] Connection lost ({error}) – reconnecting")
+            writer.close()
+            reader, writer = None, None
+            continue
+
+        if response is None:
+            print("[CMD] No response from robot")
+            await asyncio.sleep(0.5)
+            continue
+
+        if response.split("::", 1)[0] == "DONE":
+            await asyncio.sleep(0.5)  # wait before next command
             
 #Live loop of camera
 async def image_rec_from_live_video(image_rec_active: bool, runLoop: bool):
@@ -158,7 +177,7 @@ def get_params(window_name: str = "Camera") -> dict:
     }
 
 def init_camera():
-    cam = cv.VideoCapture(1)
+    cam = cv.VideoCapture(0)
     cam.set(cv.CAP_PROP_AUTO_EXPOSURE, 0.25)
     exposure = -1
     cam.set(cv.CAP_PROP_EXPOSURE, exposure)
@@ -182,7 +201,7 @@ def update_config_from_trackbars(config, params):
     config["orange_ball"]["upper"] = np.array([og[1], og[3], og[5]])
     return config
 
-def draw_output(frame, detections, final_boundaries, goals, robot_angle, raw_pts, cross_boundary, image_rec_active, target: Ball = None, tracked_objects: list[TrackedObject] = None):
+def draw_output(frame, detections, final_boundaries, goals, robot_angle, raw_pts, cross_boundary, image_rec_active, target: Ball = None, tracked_objects: list[TrackedObject] = None, path: list = None, robot = None):
     #hvid_reference_boks = (1000,1000, 5, 5)
     #frame = color_correct_with_reference(frame,hvid_reference_boks)
     
@@ -198,6 +217,10 @@ def draw_output(frame, detections, final_boundaries, goals, robot_angle, raw_pts
         
         if(target is not None):
             output = draw_target(output,target)
+            
+        if(path is not None and len(path)>0 and robot is not None):
+            output = draw_path(output, path, robot)
+        
         
         cv.imshow('Camera', output)
     else:
@@ -230,10 +253,11 @@ def run_detection(frame, config):
 
         
 async def run_controller(controller: MainController, scene, reader, writer, sendCommands: bool = True):
+    if reader is None or writer is None or writer.is_closing():
+        return None
+
     controller.initializeObjects(scene)
     controller.updateRobotState()
-    if reader is None or writer is None:
-        return "DONE::NoCommand"
     if sendCommands is True and len(controller.commandsQueue) > 0:
         response: str = await send_command(reader, writer, controller.passCommandToRobot())
         return response

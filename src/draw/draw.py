@@ -87,15 +87,15 @@ def draw_target(output: np.ndarray, targetBall: Ball, robot: Robot = None):
     if targetBall is None:
         return
     
+    x = None
+    y = None
     x = targetBall.x
     y = targetBall.y
+    
     color = (255,0,0)
 
-    if x is None or y is None:
-        return output
-
-    cv.rectangle(output, (x,y), (x+30,y+30), color, 2)
-    cv.putText(output,str("target"),(x+30,y),1,2,(color),2,None,None)
+    cv.rectangle(output, (int(x)-15,int(y)-15), (int(x)+15,int(y)+15), color, 2)
+    cv.putText(output,str("target"),(int(x)+30,int(y)),1,2,(color),2,None,None)
     if robot is None:
         return output
     cv.line(output, (robot.x, robot.y),(targetBall.x,targetBall.y), (0,0,255), 3)
@@ -112,4 +112,40 @@ def draw_tracked_objects(output: np.ndarray, objects: list[TrackedObject]):
     for object in objects:
         cv.putText(output, str(object.id), (object.x, object.y),1,2,(0,0,0),2,None,None)
     
+    return output
+
+def draw_path(output: np.ndarray, path: list, robot=None):
+    if output is None or not path:
+        return output
+
+    # Draw each point in the path
+    for i, point in enumerate(path):
+        if isinstance(point, dict):
+            x, y = int(point["x"]), int(point["y"])
+        else:
+            x, y = int(point.x), int(point.y)
+
+        # Last point = final target (red), waypoints = yellow
+        color = (0, 0, 255) if i == len(path) - 1 else (0, 255, 255)
+        cv.circle(output, (x, y), 8, color, -1)
+        cv.putText(output, str(i), (x + 10, y), 1, 2, color, 2)
+
+        # Draw line to next point
+        if i < len(path) - 1:
+            next_point = path[i + 1]
+            if isinstance(next_point, dict):
+                nx, ny = int(next_point["x"]), int(next_point["y"])
+            else:
+                nx, ny = int(next_point.x), int(next_point.y)
+            cv.line(output, (x, y), (nx, ny), (0, 255, 255), 2)
+
+    # Draw line from robot to first point
+    if robot is not None:
+        first = path[0]
+        if isinstance(first, dict):
+            fx, fy = int(first["x"]), int(first["y"])
+        else:
+            fx, fy = int(first.x), int(first.y)
+        cv.line(output, (int(robot.x), int(robot.y)), (fx, fy), (255, 255, 0), 2)
+
     return output

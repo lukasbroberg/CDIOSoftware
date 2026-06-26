@@ -3,6 +3,7 @@ from models.Ball import *
 from utils.getAngle import *
 from models.Robot_config import *
 from models.Ball import *
+from models.Goal import *
 
 class Robot:
     #Constructor for Robot
@@ -13,27 +14,27 @@ class Robot:
         self.target = None
         self.pickedUpBalls = 0
         self.deliveredBalls = 0
-    
     def findNearestBall(self, balls: list[Ball]):
         nearest = None
         nearestDist = None
 
         for i, ball in enumerate(balls):
-            d = getDistance(self.x,self.y,ball.x,ball.y,26,0)
-            #Check if the ball is too close - might be the robot itself then.
-            if(d<ROBOTCONFIG['leastDistanceToBall'] and len(balls)>1):
+            d = getDistance(self.x, self.y, 26, ball.x, ball.y, 0)
+            # Ignore detections inside the robot footprint.  Apart from being
+            # false positives, they cause the robot to turn back and forth
+            # because there is no meaningful heading to them.
+            if d < ROBOTCONFIG['minimumTargetDistance']:
                 continue
             if nearest is None or nearestDist is None:
                 nearestDist=d
                 nearest=ball
-            
+
             if d < nearestDist:
                 nearestDist=d
                 nearest=ball
                 print("New nearest", nearest.x, nearest.y)
         return nearest
-    
-    
+
     #def findNearestBall(self, balls):
         if len(balls) == 0:
             return None
@@ -48,23 +49,27 @@ class Robot:
                 ball["position"]["y"] - robot_y
             )
         )
-        
+
     def setTarget(self, target):
         import copy
         _target = copy.copy(target)
         self.target = _target
-        self.target.x = _target.x + ROBOTCONFIG['targetOffsetX']
-        self.target.y = _target.y + ROBOTCONFIG['targetOffsetY']
-    
+        if isinstance(target, Goal):
+            self.target.x = _target.x
+            self.target.y = _target.y
+        else:
+            self.target.x = _target.x + ROBOTCONFIG['targetOffsetX']
+            self.target.y = _target.y + ROBOTCONFIG['targetOffsetY']
+
     def getDeltaAngle(self, targetAngle_deg):
         if targetAngle_deg is None:
             return None
-        
-        
-        # 3. FIX THE FLIPPED MARKER: Add 180 degrees because the ArUco 
+
+
+        # 3. FIX THE FLIPPED MARKER: Add 180 degrees because the ArUco
         # thinks the back of the robot is the front.
         robot_deg = (self.rotation + 180) % 360
-        
+
         # 4. Find the shortest steering delta
         delta = (targetAngle_deg - robot_deg ) % 360 - 180
         return delta
@@ -75,4 +80,4 @@ class Robot:
         isFacing = abs(self.getDeltaAngle(getAngle(self.x,self.y,self.target.x,self.target.y,26,0))) <= tolerance;
         return isFacing
 
-    
+
