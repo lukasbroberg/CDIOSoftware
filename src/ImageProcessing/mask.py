@@ -26,3 +26,9 @@ def clean_mask(mask: np.ndarray, cfg: dict) -> np.ndarray:
     mask = cv.dilate(mask, kernel, iterations=3)
     
     return mask
+
+#Specificaly cleanup for boundary detectons.
+def clean_mask_boundary(mask: np.ndarray, cfg: dict) -> np.ndarray:
+    kernel = cfg.get("kernel", MORPH_KERNEL)
+    mask = cv.morphologyEx(mask, cv.MORPH_CLOSE, kernel, iterations=2)
+    return mask

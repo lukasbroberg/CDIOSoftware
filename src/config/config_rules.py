@@ -6,20 +6,20 @@ COLOR_CONFIG = {
     "orange_ball": {
         # Orange sits near red's high edge → hue 5-18 works well for a ping-pong ball
         "kernel": cv.getStructuringElement(cv.MORPH_RECT, (5,5)),
-        "lower": np.array([15,  110,  168]),
-        "upper": np.array([35, 255, 255]),
+        "lower": np.array([15,  170,  138]),
+        "upper": np.array([50, 255, 255]),
         "draw_color": (0, 140, 255),   # BGR – orange for display
     },
     "white_ball": {
         # White = very low saturation, high brightness
         "kernel": cv.getStructuringElement(cv.MORPH_ELLIPSE, (5,5)),
-        "lower": np.array([0,   0, 213]),
-        "upper": np.array([179, 50, 255]),
+        "lower": np.array([0,   0, 200]),
+        "upper": np.array([179, 20, 255]),
         "draw_color": (240, 240, 200),  # BGR – light gray for display
     },
     "boundary": {
         # Red wraps around 0 in OpenCV HSV; handle both lobes
-        "kernel": cv.getStructuringElement(cv.MORPH_RECT, (2,2)),
+        "kernel": cv.getStructuringElement(cv.MORPH_RECT, (3,3)),
         "lower":  np.array([0,   100, 130]),
         "upper":  np.array([20,   255, 255]),
         "lower2": np.array([165, 50, 80]),
@@ -29,5 +29,5 @@ COLOR_CONFIG = {
 }
 
 #Doesnt recognize objects small than (in pxs):
-MIN_AREA = 800
-MAX_AREA = 2000
+MIN_AREA = 300
+MAX_AREA = 1500

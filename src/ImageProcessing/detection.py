@@ -3,13 +3,27 @@ import numpy as np
 import cv2 as cv
 import struct
 import math
+<<<<<<< HEAD
 from config.arucoConfig import aruco_config
 from ImageProcessing.image import mask_image_by_walls
 from ImageProcessing.mask import build_mask, clean_mask
+=======
+from collections import deque
+from config.arucoConfig import aruco_config
+from ImageProcessing.image import mask_image_by_walls
+from ImageProcessing.mask import build_mask, clean_mask, clean_mask_boundary
+>>>>>>> development
 
 
 #Detects objects based on color: Orange ball, white ball, etc.  
 def detect_objects(image: np.ndarray, config) -> list[dict]:
+<<<<<<< HEAD
+=======
+    
+    if image is None:
+        return
+    
+>>>>>>> development
     hsv = cv.cvtColor(image, cv.COLOR_BGR2HSV)
     results = []    
     
@@ -37,6 +51,7 @@ def detect_objects(image: np.ndarray, config) -> list[dict]:
                 "area": area,
                 "color": cfg["draw_color"],
             })
+<<<<<<< HEAD
             
     return results
 
@@ -46,6 +61,28 @@ def detect_boundary_lines(image: np.ndarray) -> list[dict]:
     red_mask = build_mask(hsv,COLOR_CONFIG["boundary"])
     lines = cv.HoughLinesP(red_mask, rho=1, theta=np.pi/180, threshold=100, minLineLength=100, maxLineGap=20)
     
+=======
+    
+    #Filter results from boundaries, as they are detected in another detction
+    filtered_results = [obj for obj in results if obj["label"] != "boundary"]
+            
+    return filtered_results
+
+#Detects the red boundary lines of the level
+def detect_boundary_lines(image: np.ndarray) -> list[dict]:
+    if image is None:
+        return None, None
+    
+    hsv = cv.cvtColor(image, cv.COLOR_BGR2HSV)
+    red_mask = build_mask(hsv,COLOR_CONFIG["boundary"])
+    red_mask = clean_mask_boundary(red_mask,COLOR_CONFIG["boundary"])
+    lines = cv.HoughLinesP(red_mask, rho=1, theta=np.pi/180, threshold=100, minLineLength=100, maxLineGap=20)
+    
+    
+    if lines is None:
+        return None, None
+    
+>>>>>>> development
     points =    [(line[0][0],line[0][1]) for line in lines] + \
                 [(line[0][2],line[0][3]) for line in lines]
                 
@@ -78,6 +115,57 @@ def detect_boundary_lines(image: np.ndarray) -> list[dict]:
     ]    
     return lines, final_boundaries
 
+<<<<<<< HEAD
+=======
+def expand_boundaries(boundaries, buffer=30):
+    if boundaries is None:
+        return None
+    
+    expanded = []
+    for b in boundaries:
+        x1, y1, x2, y2, label = b
+        if label == "top_wall":
+            y1 += buffer; y2 += buffer
+        elif label == "bottom_wall":
+            y1 -= buffer; y2 -= buffer
+        elif label == "left_wall":
+            x1 += buffer; x2 += buffer
+        elif label == "right_wall":
+            x1 -= buffer; x2 -= buffer
+        expanded.append([x1, y1, x2, y2, label])
+    return expanded
+
+BOUNDARY_HISTORY = {
+    "top_wall":    deque(maxlen=20),
+    "bottom_wall": deque(maxlen=20),
+    "left_wall":   deque(maxlen=20),
+    "right_wall":  deque(maxlen=20),
+}
+
+def smooth_boundaries(new_boundaries):
+    if new_boundaries is None:
+        # Return last known good boundaries if available
+        smoothed = []
+        for label, history in BOUNDARY_HISTORY.items():
+            if history:
+                avg = np.mean(history, axis=0).astype(int)
+                smoothed.append([*avg, label])
+        return smoothed if smoothed else None
+
+    for b in new_boundaries:
+        x1, y1, x2, y2, label = b
+        if label in BOUNDARY_HISTORY:
+            BOUNDARY_HISTORY[label].append([x1, y1, x2, y2])
+
+    smoothed = []
+    for label, history in BOUNDARY_HISTORY.items():
+        if history:
+            avg = np.mean(history, axis=0).astype(int)
+            smoothed.append([int(avg[0]), int(avg[1]), int(avg[2]), int(avg[3]), label])
+
+    return smoothed
+
+>>>>>>> development
 #Detects goals from a prefixed width of the boundary lines of the level
 def detect_goals_from_lines(lines: list[dict]):
     goals = []
@@ -113,12 +201,27 @@ def detect_goals_from_lines(lines: list[dict]):
 #Detects the cross in the middle of the screen
 def detect_boundary_cross(image: np.ndarray):
     
+<<<<<<< HEAD
     h,w = image.shape[:2]
     
     top = h//4
     bottom = h - h//4
     left = w//4
     right = w - w//4
+=======
+    if image is None:
+        return [
+            None,
+            None
+        ]
+    
+    h,w = image.shape[:2]
+    
+    top = h//3
+    bottom = h - h//3
+    left = w//3
+    right = w - w//3
+>>>>>>> development
     
     masked = np.zeros_like(image)
     masked[top:bottom, left:right] = image[top: bottom, left:right]
@@ -127,6 +230,11 @@ def detect_boundary_cross(image: np.ndarray):
     red_mask = build_mask(hsv,COLOR_CONFIG["boundary"])
     lines = cv.HoughLinesP(red_mask, rho=1, theta=np.pi/180, threshold=100, minLineLength=100, maxLineGap=20)
 
+<<<<<<< HEAD
+=======
+    if lines is None:
+        return
+>>>>>>> development
     points =    [(line[0][0],line[0][1]) for line in lines] + \
                 [(line[0][2],line[0][3]) for line in lines]
     top = min(points,key=lambda p: p[1])
@@ -142,6 +250,12 @@ def detect_boundary_cross(image: np.ndarray):
 #Detects and identifies goals based on aruco markers on the level
 def detect_goals_from_aruco(image: np.ndarray):
     
+<<<<<<< HEAD
+=======
+    if image is None:
+        return [None, None]
+    
+>>>>>>> development
     large_goal_id = aruco_config["large_goal_id"]
     small_goal_id = aruco_config["small_goal_id"]
     
@@ -180,6 +294,12 @@ def detect_goals_from_aruco(image: np.ndarray):
 
 #Detects and identifies the robot based on the aruco marker
 def detect_robot_from_aruco(image: np.ndarray):
+<<<<<<< HEAD
+=======
+    
+    if image is None:
+        return None, None, None
+>>>>>>> development
         
     robot_id = aruco_config["robot_id"]
     

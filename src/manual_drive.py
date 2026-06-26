@@ -14,14 +14,16 @@ def read_key():
 
 KEY_MAP = {
     "w": "FORWARD_TIMED::2",
-    "a": "LEFT_TIMED::2",
+    "a": "LEFT_TIMED::6.5",
     "s": "BACKWARD_TIMED::2",
-    "d": "RIGHT_TIMED::2",
+    "d": "RIGHT_TIMED::6.5",
     "c": "COLLECT",
     "r": "RELEASE",
     " ": "STOP",
     "q": "EXIT",
     "p": "ON_CONNECTION",
+    "o": "OPENDOOR",
+    "l": "CLOSEDOOR",
 }
 
 VALUE_MAP = {
@@ -31,7 +33,6 @@ VALUE_MAP = {
 
 keep_connection = True
 s = establish_connection()
-#s.sendall(("ON_CONNECTION"+"\n").encode("utf-8"))
 while(keep_connection):        
     key = read_key()
             
@@ -44,4 +45,15 @@ while(keep_connection):
         break
     
     s.sendall((cmd+"\n").encode("utf-8"))
+
+    buffer = b""
+    while b"\n" not in buffer:
+        data = s.recv(1024)
+        if not data:
+            raise RuntimeError("Robot disconnected")
+        buffer += data
+
+    response = buffer.decode("utf-8").strip()
+    
     print("command: " + str(cmd) + " sent")
+    print("Svar fra robot:", response)
